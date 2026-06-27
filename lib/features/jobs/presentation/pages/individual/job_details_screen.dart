@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hireasy_mobile/core/api/api_endpoints.dart';
 import 'package:hireasy_mobile/core/api/token_service.dart';
 import 'package:hireasy_mobile/features/auth/domain/entities/auth_entity.dart';
 import 'package:hireasy_mobile/features/auth/domain/usecase/get_current_user.dart';
@@ -70,7 +72,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _JobImage(photoUrl: _firstPhoto),
+                    _JobPhotoGallery(photoUrls: _photoUrls),
                     const SizedBox(height: 22),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,11 +271,26 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       );
   }
 
-  String? get _firstPhoto {
-    for (final photo in job.photos) {
-      if (photo.trim().isNotEmpty) return photo.trim();
-    }
-    return null;
+  List<String> get _photoUrls {
+    return job.photos
+        .map((photo) => photo.trim())
+        .where((photo) => photo.isNotEmpty)
+        .map(_resolvePhotoUrl)
+        .toList();
+  }
+
+  String _resolvePhotoUrl(String photo) {
+    final uri = Uri.tryParse(photo);
+    if (uri != null && uri.hasScheme) return photo;
+
+    final baseUri = Uri.parse(ApiEndpoints.baseUrl);
+    final origin = '${baseUri.scheme}://${baseUri.authority}';
+    final cleanPhoto = photo.replaceAll('\\', '/');
+
+    if (cleanPhoto.startsWith('/api/')) return '$origin$cleanPhoto';
+    if (cleanPhoto.startsWith('/')) return '$origin$cleanPhoto';
+    if (cleanPhoto.startsWith('uploads/')) return '$origin/$cleanPhoto';
+    return '$origin/uploads/$cleanPhoto';
   }
 
   String _formatPay(num pay) {
@@ -341,6 +358,69 @@ class _ApplicationStatusCard extends StatelessWidget {
   }
 }
 
+class _JobPhotoGallery extends StatefulWidget {
+  final List<String> photoUrls;
+
+  const _JobPhotoGallery({required this.photoUrls});
+
+  @override
+  State<_JobPhotoGallery> createState() => _JobPhotoGalleryState();
+}
+
+class _JobPhotoGalleryState extends State<_JobPhotoGallery> {
+  int _currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrls = widget.photoUrls;
+
+    if (photoUrls.isEmpty) {
+      return const _JobImage(photoUrl: null);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          children: [
+            PageView.builder(
+              itemCount: photoUrls.length,
+              onPageChanged: (index) => setState(() => _currentIndex = index),
+              itemBuilder: (context, index) {
+                return _JobNetworkImage(photoUrl: photoUrls[index]);
+              },
+            ),
+            if (photoUrls.length > 1)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_currentIndex + 1}/${photoUrls.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _JobImage extends StatelessWidget {
   final String? photoUrl;
 
@@ -357,7 +437,12 @@ class _JobImage extends StatelessWidget {
             : Image.network(
                 photoUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const _ImagePlaceholder(),
+                errorBuilder: (_, error, _) {
+                  if (kDebugMode) {
+                    debugPrint('Could not load job photo: $photoUrl ($error)');
+                  }
+                  return const _ImagePlaceholder();
+                },
                 loadingBuilder: (context, child, progress) {
                   if (progress == null) return child;
                   return const ColoredBox(
@@ -367,6 +452,33 @@ class _JobImage extends StatelessWidget {
                 },
               ),
       ),
+    );
+  }
+}
+
+class _JobNetworkImage extends StatelessWidget {
+  final String photoUrl;
+
+  const _JobNetworkImage({required this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.network(
+      photoUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, error, _) {
+        if (kDebugMode) {
+          debugPrint('Could not load job photo: $photoUrl ($error)');
+        }
+        return const _ImagePlaceholder();
+      },
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return const ColoredBox(
+          color: Color(0xFFE9EDF5),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      },
     );
   }
 }

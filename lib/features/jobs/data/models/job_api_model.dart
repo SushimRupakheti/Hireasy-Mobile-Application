@@ -138,8 +138,18 @@ class JobApiModel {
     if (value is! List) return const [];
     return value
         .map((item) {
-          if (item is Map<String, dynamic>) {
-            return item['_id']?.toString() ?? '';
+          if (item is Map) {
+            final map = Map<String, dynamic>.from(item);
+            return (map['url'] ??
+                    map['path'] ??
+                    map['location'] ??
+                    map['secure_url'] ??
+                    map['filename'] ??
+                    map['fileName'] ??
+                    map['key'] ??
+                    map['_id'])
+                ?.toString() ??
+                '';
           }
           return item.toString();
         })

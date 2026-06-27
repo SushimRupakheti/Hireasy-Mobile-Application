@@ -1,8 +1,15 @@
 class JobApplicationEntity {
   final String workerId;
   final String status;
+  final String? workerName;
+  final String? workerProfileImage;
 
-  const JobApplicationEntity({required this.workerId, this.status = 'pending'});
+  const JobApplicationEntity({
+    required this.workerId,
+    this.status = 'pending',
+    this.workerName,
+    this.workerProfileImage,
+  });
 }
 
 class JobEntity {

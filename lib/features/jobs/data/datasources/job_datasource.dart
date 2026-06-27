@@ -6,7 +6,13 @@ abstract interface class IJobRemoteDataSource {
 
   Future<GetJobsApiResponse> getMyJobs();
 
+  Future<GetJobApplicantsApiResponse> getJobApplicants(String jobId);
+
   Future<ApplyJobApiResponse> applyForJob(String jobId);
 
   Future<CreateJobApiResponse> createJob(JobApiModel job);
+
+  Future<UpdateJobApiResponse> updateJob(String jobId, JobApiModel job);
+
+  Future<DeleteJobApiResponse> deleteJob(String jobId);
 }

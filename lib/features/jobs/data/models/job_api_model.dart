@@ -86,6 +86,19 @@ class JobApiModel {
     };
   }
 
+  Map<String, dynamic> toUpdateJson() {
+    return <String, dynamic>{
+      if (roleType.trim().isNotEmpty) 'roleType': roleType.trim(),
+      if (numberOfWorkers > 0) 'numberOfWorkers': numberOfWorkers,
+      if (pay > 0) 'pay': pay,
+      if (shift.trim().isNotEmpty) 'shift': shift.trim(),
+      if (location.trim().isNotEmpty) 'location': location.trim(),
+      if (jobDate.trim().isNotEmpty) 'job_date': jobDate.trim(),
+      'photos': photos,
+      if (description.trim().isNotEmpty) 'description': description.trim(),
+    };
+  }
+
   JobEntity toEntity() {
     return JobEntity(
       id: id,
@@ -153,6 +166,8 @@ class JobApiModel {
               status: (map['applicationStatus'] ?? map['status'] ?? 'pending')
                   .toString()
                   .toLowerCase(),
+              workerName: _parseWorkerName(workerValue),
+              workerProfileImage: _parseWorkerProfileImage(workerValue),
             );
           }
           return JobApplicationEntity(workerId: item.toString());
@@ -166,5 +181,35 @@ class JobApiModel {
       return value['_id']?.toString() ?? value['id']?.toString() ?? '';
     }
     return value?.toString() ?? '';
+  }
+
+  static String? _parseWorkerName(dynamic value) {
+    if (value is! Map) return null;
+    final firstName = value['firstName']?.toString().trim() ?? '';
+    final lastName = value['lastName']?.toString().trim() ?? '';
+    final fullName = [firstName, lastName]
+        .where((part) => part.isNotEmpty)
+        .join(' ')
+        .trim();
+    if (fullName.isNotEmpty) return fullName;
+
+    final name =
+        value['name'] ??
+        value['fullName'] ??
+        value['displayName'] ??
+        value['username'];
+    final parsedName = name?.toString().trim();
+    return parsedName == null || parsedName.isEmpty ? null : parsedName;
+  }
+
+  static String? _parseWorkerProfileImage(dynamic value) {
+    if (value is! Map) return null;
+    final profileImage =
+        value['profileImage'] ??
+        value['profile_image'] ??
+        value['avatar'] ??
+        value['photo'];
+    final parsedImage = profileImage?.toString().trim();
+    return parsedImage == null || parsedImage.isEmpty ? null : parsedImage;
   }
 }

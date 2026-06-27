@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/core/api/api_error_message.dart';
 import 'package:hireasy_mobile/core/api/token_service.dart';
 import 'package:hireasy_mobile/features/auth/domain/usecase/get_current_user.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/apply_for_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/create_job_usecase.dart';
+import 'package:hireasy_mobile/features/jobs/domain/usecases/delete_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_jobs_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_my_jobs_usecase.dart';
+import 'package:hireasy_mobile/features/jobs/domain/usecases/update_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/state/job_state.dart';
 
 final jobViewModelProvider = NotifierProvider<JobViewModel, JobState>(
@@ -216,6 +219,88 @@ class JobViewModel extends Notifier<JobState> {
         appliedJobIds: state.appliedJobIds,
         applicationStatuses: state.applicationStatuses,
         errorMessage: error.toString(),
+      );
+      return false;
+    }
+  }
+
+  Future<JobEntity?> updateJob(String jobId, UpdateJobParams params) async {
+    if (!ref.read(tokenServiceProvider).isVerified) {
+      state = state.copyWith(
+        errorMessage:
+            'Account is pending. Only verified companies can edit jobs.',
+      );
+      return null;
+    }
+
+    state = state.copyWith(isLoading: true, clearFeedback: true);
+
+    try {
+      final updatedJob = await ref
+          .read(updateJobUsecaseProvider)
+          .call(jobId, params);
+      state = state.copyWith(
+        isLoading: false,
+        jobs: state.jobs
+            .map((job) => job.id == jobId ? updatedJob : job)
+            .toList(),
+        successMessage: 'Job updated successfully',
+      );
+      return updatedJob;
+    } on DioException catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: apiErrorMessage(
+          error,
+          fallback: 'Unable to update the job.',
+        ),
+      );
+      return null;
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error is FormatException
+            ? error.message
+            : 'Unable to update the job.',
+      );
+      return null;
+    }
+  }
+
+  Future<bool> deleteJob(String jobId) async {
+    if (!ref.read(tokenServiceProvider).isVerified) {
+      state = state.copyWith(
+        errorMessage:
+            'Account is pending. Only verified companies can delete jobs.',
+      );
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, clearFeedback: true);
+
+    try {
+      final message = await ref.read(deleteJobUsecaseProvider).call(jobId);
+      state = state.copyWith(
+        isLoading: false,
+        jobs: state.jobs.where((job) => job.id != jobId).toList(),
+        successMessage: message,
+      );
+      return true;
+    } on DioException catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: apiErrorMessage(
+          error,
+          fallback: 'Unable to delete the job.',
+        ),
+      );
+      return false;
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error is FormatException
+            ? error.message
+            : 'Unable to delete the job.',
       );
       return false;
     }

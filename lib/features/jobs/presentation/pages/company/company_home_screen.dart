@@ -2,77 +2,100 @@ import 'package:flutter/material.dart';
 
 import '../../widgets/worker_category_card.dart';
 
-class CompanyHomeScreen extends StatelessWidget {
+class _WorkerCategory {
+  final String title;
+  final String imagePath;
+
+  const _WorkerCategory({required this.title, required this.imagePath});
+}
+
+class CompanyHomeScreen extends StatefulWidget {
   final ValueChanged<String?>? onPostJobRequested;
 
   const CompanyHomeScreen({super.key, this.onPostJobRequested});
+
+  @override
+  State<CompanyHomeScreen> createState() => _CompanyHomeScreenState();
+}
+
+class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
+  final _searchController = TextEditingController();
+
+  static const _categories = [
+    _WorkerCategory(
+      title: 'Warehouse Associates',
+      imagePath: 'assets/images/warehouse.jpg',
+    ),
+    _WorkerCategory(
+      title: 'Factory Workers',
+      imagePath: 'assets/images/factory.jpg',
+    ),
+    _WorkerCategory(title: 'Labors', imagePath: 'assets/images/labors.jpg'),
+    _WorkerCategory(title: 'Handyman', imagePath: 'assets/images/handyman.jpg'),
+    _WorkerCategory(title: 'Painters', imagePath: 'assets/images/painter.jpg'),
+    _WorkerCategory(title: 'Cleaners', imagePath: 'assets/images/cleaner.jpg'),
+    _WorkerCategory(title: 'Waiters', imagePath: 'assets/images/waiter.jpg'),
+    _WorkerCategory(title: 'Movers', imagePath: 'assets/images/mover.jpg'),
+  ];
 
   static const _primaryBlue = Color(0xFF3F7CF4);
   static const _navyBlue = Color(0xFF18346F);
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final categories = _filteredCategories;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8FA),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openPostJobScreen(context),
+        backgroundColor: _navyBlue,
+        foregroundColor: Colors.white,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add_rounded, size: 32),
+      ),
       body: Column(
         children: [
           _buildHeader(context),
           const _SectionTitle(),
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                WorkerCategoryCard(
-                  title: 'Warehouse Associates',
-                  imagePath: 'assets/images/warehouse.jpg',
-                  onTap: () =>
-                      _openPostJobScreen(context, 'Warehouse Associates'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Factory Workers',
-                  imagePath: 'assets/images/factory.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Factory Workers'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Labors',
-                  imagePath: 'assets/images/labors.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Labors'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Handyman',
-                  imagePath: 'assets/images/handyman.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Handyman'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Painters',
-                  imagePath: 'assets/images/painter.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Painters'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Cleaners',
-                  imagePath: 'assets/images/cleaner.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Cleaners'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Waiters',
-                  imagePath: 'assets/images/waiter.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Waiters'),
-                ),
-                WorkerCategoryCard(
-                  title: 'Movers',
-                  imagePath: 'assets/images/mover.jpg',
-                  onTap: () => _openPostJobScreen(context, 'Movers'),
-                ),
-              ],
-            ),
+            child: categories.isEmpty
+                ? const _NoCategoryResults()
+                : ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: categories.length,
+                    itemBuilder: (context, index) {
+                      final category = categories[index];
+                      return WorkerCategoryCard(
+                        title: category.title,
+                        imagePath: category.imagePath,
+                        onTap: () =>
+                            _openPostJobScreen(context, category.title),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  void _openPostJobScreen(BuildContext context, String roleType) {
-    onPostJobRequested?.call(roleType);
+  List<_WorkerCategory> get _filteredCategories {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _categories;
+    return _categories
+        .where((category) => category.title.toLowerCase().contains(query))
+        .toList();
+  }
+
+  void _openPostJobScreen(BuildContext context, [String? roleType]) {
+    widget.onPostJobRequested?.call(roleType);
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -129,6 +152,8 @@ class CompanyHomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 34),
           TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
             style: const TextStyle(fontSize: 15, color: Color(0xFF1C1C1E)),
             decoration: InputDecoration(
               hintText: 'Search ...',
@@ -136,11 +161,19 @@ class CompanyHomeScreen extends StatelessWidget {
                 color: Color(0xFF888888),
                 fontSize: 15,
               ),
-              suffixIcon: const Icon(
-                Icons.search_rounded,
-                color: Colors.black,
-                size: 28,
-              ),
+              suffixIcon: _searchController.text.isEmpty
+                  ? const Icon(
+                      Icons.search_rounded,
+                      color: Colors.black,
+                      size: 28,
+                    )
+                  : IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
@@ -260,6 +293,28 @@ class _SectionTitle extends StatelessWidget {
           color: Color(0xFFBDBDBD),
           fontSize: 15,
           fontWeight: FontWeight.w400,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoCategoryResults extends StatelessWidget {
+  const _NoCategoryResults();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(28),
+        child: Text(
+          'No matching worker categories found.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Color(0xFF777C86),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );

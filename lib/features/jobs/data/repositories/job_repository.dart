@@ -27,6 +27,12 @@ class JobRepository implements IJobRepository {
   }
 
   @override
+  Future<List<JobApplicationEntity>> getJobApplicants(String jobId) async {
+    final response = await remoteDataSource.getJobApplicants(jobId);
+    return response.applicants;
+  }
+
+  @override
   Future<String> applyForJob(String jobId) async {
     final response = await remoteDataSource.applyForJob(jobId);
     return response.message;
@@ -37,5 +43,18 @@ class JobRepository implements IJobRepository {
     final model = JobApiModel.fromEntity(job);
     final response = await remoteDataSource.createJob(model);
     return response.job.toEntity();
+  }
+
+  @override
+  Future<JobEntity> updateJob(String jobId, JobEntity job) async {
+    final model = JobApiModel.fromEntity(job);
+    final response = await remoteDataSource.updateJob(jobId, model);
+    return response.job.toEntity();
+  }
+
+  @override
+  Future<String> deleteJob(String jobId) async {
+    final response = await remoteDataSource.deleteJob(jobId);
+    return response.message;
   }
 }

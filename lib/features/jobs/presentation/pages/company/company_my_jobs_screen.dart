@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
-import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/job_details_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_job_details_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/state/job_state.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/job_card.dart';
@@ -16,13 +16,11 @@ class CompanyMyJobsScreen extends ConsumerStatefulWidget {
 
 class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
   final _searchController = TextEditingController();
-  late DateTime _selectedDate;
+  DateTime? _selectedDate;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _selectedDate = DateTime(now.year, now.month, now.day);
     Future.microtask(() => ref.read(jobViewModelProvider.notifier).getMyJobs());
   }
 
@@ -35,7 +33,10 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(jobViewModelProvider);
-    final myJobs = state.jobs.where(_matchesSearch).toList();
+    final myJobs = state.jobs
+        .where(_matchesSelectedDate)
+        .where(_matchesSearch)
+        .toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FA),
@@ -95,7 +96,9 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  _fullDate(_selectedDate),
+                  _selectedDate == null
+                      ? 'All posted jobs'
+                      : _fullDate(_selectedDate!),
                   style: const TextStyle(
                     color: Color(0xFF252832),
                     fontSize: 13,
@@ -125,6 +128,27 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
         job.roleType.toLowerCase().contains(query) ||
         job.location.toLowerCase().contains(query) ||
         job.description.toLowerCase().contains(query);
+  }
+
+  bool _matchesSelectedDate(JobEntity job) {
+    final selectedDate = _selectedDate;
+    if (selectedDate == null) return true;
+
+    final jobDate = _parseJobDate(job.jobDate);
+    if (jobDate == null) return false;
+    return _sameDay(jobDate, selectedDate);
+  }
+
+  DateTime? _parseJobDate(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty) return null;
+    return DateTime.tryParse(trimmedValue);
+  }
+
+  bool _sameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
   }
 
   Widget _buildBody({required List<JobEntity> jobs, required JobState state}) {
@@ -169,7 +193,9 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => JobDetailsScreen(job: job)),
+                MaterialPageRoute(
+                  builder: (_) => CompanyJobDetailsScreen(job: job),
+                ),
               );
             },
           );
@@ -217,16 +243,21 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
 }
 
 class _DateSelector extends StatelessWidget {
-  final DateTime selectedDate;
-  final ValueChanged<DateTime> onSelected;
+  static const _primaryColor = Color(0xFF203E7B);
+
+  final DateTime? selectedDate;
+  final ValueChanged<DateTime?> onSelected;
 
   const _DateSelector({required this.selectedDate, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final currentDate = DateTime(today.year, today.month, today.day);
+    final anchorDate = selectedDate ?? currentDate;
     final dates = List.generate(
       7,
-      (index) => selectedDate.add(Duration(days: index - 3)),
+      (index) => anchorDate.add(Duration(days: index - 3)),
     );
 
     return SizedBox(
@@ -238,21 +269,26 @@ class _DateSelector extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 11),
         itemBuilder: (context, index) {
           final date = dates[index];
-          final selected = _sameDay(date, selectedDate);
+          final selected =
+              selectedDate != null && _sameDay(date, selectedDate!);
+          final isToday = _sameDay(date, currentDate);
+          final borderColor = selected || isToday
+              ? _primaryColor
+              : const Color(0xFFD5D8DF);
+          final borderWidth = selected || isToday ? 1.5 : 1.0;
           return InkWell(
-            onTap: () => onSelected(date),
+            onTap: () => onSelected(selected ? null : date),
             borderRadius: BorderRadius.circular(8),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               width: 71,
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFF203E7B) : Colors.white,
+                color: selected ? _primaryColor : Colors.white,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: selected
-                      ? const Color(0xFF203E7B)
-                      : const Color(0xFFD5D8DF),
+                  color: borderColor,
+                  width: borderWidth,
                 ),
                 boxShadow: selected
                     ? null

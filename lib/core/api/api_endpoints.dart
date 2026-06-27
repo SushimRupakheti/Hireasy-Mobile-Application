@@ -141,5 +141,7 @@ class ApiEndpoints {
   // ================= JOB ENDPOINTS =================
   static const String jobs = '/jobs';
   static const String myJobs = '/jobs/mine';
+  static String jobById(String jobId) => '/jobs/$jobId';
   static String applyForJob(String jobId) => '/jobs/$jobId/apply';
+  static String jobApplicants(String jobId) => '/jobs/$jobId/applicants';
 }

@@ -46,6 +46,21 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
   }
 
   @override
+  Future<GetJobApplicantsApiResponse> getJobApplicants(String jobId) async {
+    final response = await apiClient.get(ApiEndpoints.jobApplicants(jobId));
+
+    try {
+      return GetJobApplicantsApiResponse.fromJson(response.data);
+    } on FormatException catch (error) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: error.message,
+      );
+    }
+  }
+
+  @override
   Future<ApplyJobApiResponse> applyForJob(String jobId) async {
     final response = await apiClient.post(ApiEndpoints.applyForJob(jobId));
     final responseData = response.data;
@@ -89,6 +104,64 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
     }
 
     final result = CreateJobApiResponse.fromJson(responseData);
+    if (!result.success) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: result.message,
+      );
+    }
+
+    return result;
+  }
+
+  @override
+  Future<UpdateJobApiResponse> updateJob(String jobId, JobApiModel job) async {
+    final data = job.toUpdateJson();
+    if (data.isEmpty) {
+      throw FormatException('At least one field is required.');
+    }
+
+    final response = await apiClient.patch(
+      ApiEndpoints.jobById(jobId),
+      data: data,
+    );
+
+    final responseData = response.data;
+    if (responseData is! Map<String, dynamic>) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: 'The server returned an invalid response.',
+      );
+    }
+
+    final result = UpdateJobApiResponse.fromJson(responseData);
+    if (!result.success) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: result.message,
+      );
+    }
+
+    return result;
+  }
+
+  @override
+  Future<DeleteJobApiResponse> deleteJob(String jobId) async {
+    final response = await apiClient.delete(ApiEndpoints.jobById(jobId));
+
+    final responseData = response.data;
+    if (responseData is! Map<String, dynamic>) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: 'The server returned an invalid response.',
+      );
+    }
+
+    final result = DeleteJobApiResponse.fromJson(responseData);
     if (!result.success) {
       throw DioException(
         requestOptions: response.requestOptions,

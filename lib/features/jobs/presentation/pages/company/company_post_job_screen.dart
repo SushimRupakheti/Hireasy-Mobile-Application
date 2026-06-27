@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/core/api/token_service.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/create_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
+import 'package:image_picker/image_picker.dart';
 
 class CompanyPostJobScreen extends ConsumerStatefulWidget {
   final String? initialRoleType;
@@ -23,8 +25,9 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
   final _workersController = TextEditingController();
   final _locationController = TextEditingController();
   final _jobDateController = TextEditingController();
-  final _photoController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _imagePicker = ImagePicker();
+  final List<XFile> _selectedPhotos = [];
 
   String? _selectedShift;
   DateTime? _selectedJobDate;
@@ -42,7 +45,6 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     _workersController.dispose();
     _locationController.dispose();
     _jobDateController.dispose();
-    _photoController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -58,7 +60,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     }
     if (!_formKey.currentState!.validate()) return;
 
-    final photoUrl = _photoController.text.trim();
+    final photoUploads = await _photoUploads();
     final posted = await ref
         .read(jobViewModelProvider.notifier)
         .createJob(
@@ -69,7 +71,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
             shift: _selectedShift!,
             location: _locationController.text,
             jobDate: _formatApiDate(_selectedJobDate!),
-            photos: photoUrl.isEmpty ? const [] : [photoUrl],
+            photoUploads: photoUploads,
             description: _descriptionController.text,
           ),
         );
@@ -90,11 +92,11 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
       _workersController.clear();
       _locationController.clear();
       _jobDateController.clear();
-      _photoController.clear();
       _descriptionController.clear();
       setState(() {
         _selectedShift = null;
         _selectedJobDate = null;
+        _selectedPhotos.clear();
       });
     }
   }
@@ -248,14 +250,15 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
                       _selectedJobDate == null ? 'Select a job date' : null,
                 ),
                 const SizedBox(height: 18),
-                _FieldLabel(label: 'Photo URL', suffix: ' (optional)'),
+                _FieldLabel(label: 'Job Photos', suffix: ' (up to 5)'),
                 const SizedBox(height: 8),
-                _buildTextField(
-                  controller: _photoController,
-                  hintText: 'https://example.com/job-photo.jpg',
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.next,
-                  validator: _validatePhotoUrl,
+                _PhotoPickerField(
+                  photos: _selectedPhotos,
+                  isEnabled: !isLoading,
+                  onCameraPressed: _pickFromCamera,
+                  onGalleryPressed: _pickFromGallery,
+                  onRemove: (photo) =>
+                      setState(() => _selectedPhotos.remove(photo)),
                 ),
                 const SizedBox(height: 18),
                 _FieldLabel(label: 'Description'),
@@ -370,18 +373,6 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     return null;
   }
 
-  String? _validatePhotoUrl(String? value) {
-    final photo = value?.trim() ?? '';
-    if (photo.isEmpty) return null;
-    final uri = Uri.tryParse(photo);
-    if (uri == null ||
-        !uri.hasAbsolutePath ||
-        (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return 'Enter a valid HTTP or HTTPS URL';
-    }
-    return null;
-  }
-
   String _formatApiDate(DateTime date) {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
@@ -404,6 +395,53 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
       'Dec',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  Future<void> _pickFromCamera() async {
+    if (_selectedPhotos.length >= 5) {
+      _showMessage('You can add at most 5 photos.', isError: true);
+      return;
+    }
+
+    final photo = await _imagePicker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+    if (photo == null) return;
+
+    setState(() => _selectedPhotos.add(photo));
+  }
+
+  Future<void> _pickFromGallery() async {
+    final remainingSlots = 5 - _selectedPhotos.length;
+    if (remainingSlots <= 0) {
+      _showMessage('You can add at most 5 photos.', isError: true);
+      return;
+    }
+
+    final photos = await _imagePicker.pickMultiImage(imageQuality: 80);
+    if (photos.isEmpty) return;
+
+    setState(() {
+      _selectedPhotos.addAll(photos.take(remainingSlots));
+    });
+
+    if (photos.length > remainingSlots) {
+      _showMessage(
+        'Only $remainingSlots more photo(s) were added.',
+        isError: false,
+      );
+    }
+  }
+
+  Future<List<JobPhotoUpload>> _photoUploads() async {
+    final uploads = <JobPhotoUpload>[];
+    for (final photo in _selectedPhotos) {
+      uploads.add(
+        JobPhotoUpload(fileName: photo.name, bytes: await photo.readAsBytes()),
+      );
+    }
+    return uploads;
   }
 }
 
@@ -429,6 +467,82 @@ class _FieldLabel extends StatelessWidget {
               text: suffix,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoPickerField extends StatelessWidget {
+  final List<XFile> photos;
+  final bool isEnabled;
+  final VoidCallback onCameraPressed;
+  final VoidCallback onGalleryPressed;
+  final ValueChanged<XFile> onRemove;
+
+  const _PhotoPickerField({
+    required this.photos,
+    required this.isEnabled,
+    required this.onCameraPressed,
+    required this.onGalleryPressed,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F2F4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isEnabled ? onCameraPressed : null,
+                  icon: const Icon(Icons.photo_camera_outlined, size: 19),
+                  label: const Text('Camera'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isEnabled ? onGalleryPressed : null,
+                  icon: const Icon(Icons.photo_library_outlined, size: 19),
+                  label: const Text('Gallery'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${photos.length}/5 selected',
+            style: const TextStyle(color: Color(0xFF777C86), fontSize: 12),
+          ),
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final photo in photos)
+                  InputChip(
+                    label: Text(
+                      photo.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    avatar: const Icon(Icons.image_outlined, size: 18),
+                    onDeleted: isEnabled ? () => onRemove(photo) : null,
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

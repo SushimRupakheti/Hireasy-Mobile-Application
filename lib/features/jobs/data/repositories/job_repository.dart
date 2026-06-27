@@ -3,6 +3,7 @@ import 'package:hireasy_mobile/features/jobs/data/datasources/job_datasource.dar
 import 'package:hireasy_mobile/features/jobs/data/datasources/job_remote_datasource.dart';
 import 'package:hireasy_mobile/features/jobs/data/models/job_api_model.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/repositories/job_repository.dart';
 
 final jobRepositoryProvider = Provider<IJobRepository>((ref) {
@@ -39,16 +40,30 @@ class JobRepository implements IJobRepository {
   }
 
   @override
-  Future<JobEntity> createJob(JobEntity job) async {
+  Future<JobEntity> createJob(
+    JobEntity job, {
+    List<JobPhotoUpload> photoUploads = const [],
+  }) async {
     final model = JobApiModel.fromEntity(job);
-    final response = await remoteDataSource.createJob(model);
+    final response = await remoteDataSource.createJob(
+      model,
+      photoUploads: photoUploads,
+    );
     return response.job.toEntity();
   }
 
   @override
-  Future<JobEntity> updateJob(String jobId, JobEntity job) async {
+  Future<JobEntity> updateJob(
+    String jobId,
+    JobEntity job, {
+    List<JobPhotoUpload> photoUploads = const [],
+  }) async {
     final model = JobApiModel.fromEntity(job);
-    final response = await remoteDataSource.updateJob(jobId, model);
+    final response = await remoteDataSource.updateJob(
+      jobId,
+      model,
+      photoUploads: photoUploads,
+    );
     return response.job.toEntity();
   }
 

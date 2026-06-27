@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/features/jobs/data/repositories/job_repository.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/repositories/job_repository.dart';
 
 class CreateJobParams {
@@ -11,6 +12,7 @@ class CreateJobParams {
   final String location;
   final String jobDate;
   final List<String> photos;
+  final List<JobPhotoUpload> photoUploads;
   final String description;
 
   const CreateJobParams({
@@ -21,6 +23,7 @@ class CreateJobParams {
     required this.location,
     required this.jobDate,
     this.photos = const [],
+    this.photoUploads = const [],
     required this.description,
   });
 }
@@ -46,6 +49,7 @@ class CreateJobUsecase {
         photos: params.photos,
         description: params.description.trim(),
       ),
+      photoUploads: params.photoUploads,
     );
   }
 }

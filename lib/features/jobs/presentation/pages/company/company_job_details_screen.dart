@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_job_applicants_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/update_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
+import 'package:image_picker/image_picker.dart';
 
 final companyJobApplicantsProvider =
     FutureProvider.autoDispose.family<List<JobApplicationEntity>, String>((
@@ -84,7 +86,7 @@ class _CompanyJobDetailsScreenState
                       ],
                     ),
                     const SizedBox(height: 6),
-                    _JobImage(photoUrl: _firstPhoto),
+                    _JobPhotoGallery(photoUrls: _photoUrls),
                     const SizedBox(height: 20),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,12 +227,11 @@ class _CompanyJobDetailsScreenState
         .toList();
   }
 
-  String? get _firstPhoto {
-    for (final photo in _job.photos) {
-      final trimmedPhoto = photo.trim();
-      if (trimmedPhoto.isNotEmpty) return trimmedPhoto;
-    }
-    return null;
+  List<String> get _photoUrls {
+    return _job.photos
+        .map((photo) => photo.trim())
+        .where((photo) => photo.isNotEmpty)
+        .toList();
   }
 
   void _showWorkersDialog(
@@ -367,8 +368,10 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
   final _payController = TextEditingController();
   final _locationController = TextEditingController();
   final _jobDateController = TextEditingController();
-  final _photoController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _imagePicker = ImagePicker();
+  final List<String> _existingPhotos = [];
+  final List<XFile> _selectedPhotos = [];
 
   String? _selectedShift;
   DateTime? _selectedJobDate;
@@ -388,7 +391,9 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
     if (_selectedJobDate != null) {
       _jobDateController.text = _formatDisplayDate(_selectedJobDate!);
     }
-    _photoController.text = job.photos.isEmpty ? '' : job.photos.first;
+    _existingPhotos.addAll(
+      job.photos.map((photo) => photo.trim()).where((photo) => photo.isNotEmpty),
+    );
     _descriptionController.text = job.description;
   }
 
@@ -399,7 +404,6 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
     _payController.dispose();
     _locationController.dispose();
     _jobDateController.dispose();
-    _photoController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -519,14 +523,18 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
                       _selectedJobDate == null ? 'Select a job date' : null,
                 ),
                 const SizedBox(height: 14),
-                _EditFieldLabel(label: 'Photo URL', suffix: ' (optional)'),
+                _EditFieldLabel(label: 'Job Photos', suffix: ' (up to 5)'),
                 const SizedBox(height: 7),
-                _buildTextField(
-                  controller: _photoController,
-                  hintText: 'https://example.com/photo.jpg',
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.next,
-                  validator: _validatePhotoUrl,
+                _EditPhotoPickerField(
+                  existingPhotos: _existingPhotos,
+                  newPhotos: _selectedPhotos,
+                  isEnabled: !isLoading,
+                  onCameraPressed: _pickFromCamera,
+                  onGalleryPressed: _pickFromGallery,
+                  onRemoveExisting: (photo) =>
+                      setState(() => _existingPhotos.remove(photo)),
+                  onRemoveNew: (photo) =>
+                      setState(() => _selectedPhotos.remove(photo)),
                 ),
                 const SizedBox(height: 14),
                 _EditFieldLabel(label: 'Description'),
@@ -659,7 +667,7 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
       return;
     }
 
-    final photoUrl = _photoController.text.trim();
+    final photoUploads = await _photoUploads();
     final updatedJob = await ref
         .read(jobViewModelProvider.notifier)
         .updateJob(
@@ -671,7 +679,8 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
             shift: _selectedShift!,
             location: _locationController.text,
             jobDate: _formatApiDate(_selectedJobDate!),
-            photos: photoUrl.isEmpty ? const [] : [photoUrl],
+            photos: List.unmodifiable(_existingPhotos),
+            photoUploads: photoUploads,
             description: _descriptionController.text,
           ),
         );
@@ -722,18 +731,6 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
     return null;
   }
 
-  String? _validatePhotoUrl(String? value) {
-    final photo = value?.trim() ?? '';
-    if (photo.isEmpty) return null;
-    final uri = Uri.tryParse(photo);
-    if (uri == null ||
-        !uri.hasAbsolutePath ||
-        (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return 'Enter a valid HTTP or HTTPS URL';
-    }
-    return null;
-  }
-
   String _formatApiDate(DateTime date) {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
@@ -756,6 +753,54 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
       'Dec',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  Future<void> _pickFromCamera() async {
+    if (_remainingPhotoSlots <= 0) {
+      _showSheetMessage('You can add at most 5 photos.', isError: true);
+      return;
+    }
+
+    final photo = await _imagePicker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+    if (photo == null) return;
+
+    setState(() => _selectedPhotos.add(photo));
+  }
+
+  Future<void> _pickFromGallery() async {
+    final remainingSlots = _remainingPhotoSlots;
+    if (remainingSlots <= 0) {
+      _showSheetMessage('You can add at most 5 photos.', isError: true);
+      return;
+    }
+
+    final photos = await _imagePicker.pickMultiImage(imageQuality: 80);
+    if (photos.isEmpty) return;
+
+    setState(() {
+      _selectedPhotos.addAll(photos.take(remainingSlots));
+    });
+
+    if (photos.length > remainingSlots) {
+      _showSheetMessage('Only $remainingSlots more photo(s) were added.');
+    }
+  }
+
+  int get _remainingPhotoSlots {
+    return 5 - _existingPhotos.length - _selectedPhotos.length;
+  }
+
+  Future<List<JobPhotoUpload>> _photoUploads() async {
+    final uploads = <JobPhotoUpload>[];
+    for (final photo in _selectedPhotos) {
+      uploads.add(
+        JobPhotoUpload(fileName: photo.name, bytes: await photo.readAsBytes()),
+      );
+    }
+    return uploads;
   }
 }
 
@@ -784,6 +829,107 @@ class _EditFieldLabel extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _EditPhotoPickerField extends StatelessWidget {
+  final List<String> existingPhotos;
+  final List<XFile> newPhotos;
+  final bool isEnabled;
+  final VoidCallback onCameraPressed;
+  final VoidCallback onGalleryPressed;
+  final ValueChanged<String> onRemoveExisting;
+  final ValueChanged<XFile> onRemoveNew;
+
+  const _EditPhotoPickerField({
+    required this.existingPhotos,
+    required this.newPhotos,
+    required this.isEnabled,
+    required this.onCameraPressed,
+    required this.onGalleryPressed,
+    required this.onRemoveExisting,
+    required this.onRemoveNew,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = existingPhotos.length + newPhotos.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F2F4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isEnabled ? onCameraPressed : null,
+                  icon: const Icon(Icons.photo_camera_outlined, size: 19),
+                  label: const Text('Camera'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isEnabled ? onGalleryPressed : null,
+                  icon: const Icon(Icons.photo_library_outlined, size: 19),
+                  label: const Text('Gallery'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$total/5 selected',
+            style: const TextStyle(color: Color(0xFF777C86), fontSize: 12),
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final photo in existingPhotos)
+                  InputChip(
+                    label: Text(
+                      _shortLabel(photo),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    avatar: const Icon(Icons.link_rounded, size: 18),
+                    onDeleted: isEnabled ? () => onRemoveExisting(photo) : null,
+                  ),
+                for (final photo in newPhotos)
+                  InputChip(
+                    label: Text(
+                      photo.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    avatar: const Icon(Icons.image_outlined, size: 18),
+                    onDeleted: isEnabled ? () => onRemoveNew(photo) : null,
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _shortLabel(String value) {
+    final uri = Uri.tryParse(value);
+    final path = uri?.pathSegments.isNotEmpty == true
+        ? uri!.pathSegments.last
+        : value;
+    if (path.length <= 24) return path;
+    return '...${path.substring(path.length - 21)}';
   }
 }
 
@@ -1040,6 +1186,75 @@ class _StatusDot extends StatelessWidget {
         .where((part) => part.isNotEmpty)
         .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
         .join(' ');
+  }
+}
+
+class _JobPhotoGallery extends StatelessWidget {
+  final List<String> photoUrls;
+
+  const _JobPhotoGallery({required this.photoUrls});
+
+  @override
+  Widget build(BuildContext context) {
+    if (photoUrls.isEmpty) {
+      return const _JobImage(photoUrl: null);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _JobImage(photoUrl: photoUrls.first),
+        if (photoUrls.length > 1) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 72,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: photoUrls.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                return _JobPhotoThumbnail(photoUrl: photoUrls[index]);
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _JobPhotoThumbnail extends StatelessWidget {
+  final String photoUrl;
+
+  const _JobPhotoThumbnail({required this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        width: 88,
+        height: 72,
+        child: Image.network(
+          photoUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const _ImagePlaceholder(),
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return const ColoredBox(
+              color: Color(0xFFE9EDF5),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:hireasy_mobile/core/api/api_endpoints.dart';
 import 'package:hireasy_mobile/features/jobs/data/datasources/job_datasource.dart';
 import 'package:hireasy_mobile/features/jobs/data/job_api.dart';
 import 'package:hireasy_mobile/features/jobs/data/models/job_api_model.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 
 final jobRemoteDataSourceProvider = Provider<IJobRemoteDataSource>((ref) {
   return JobRemoteDataSource(apiClient: ref.read(apiClientProvider));
@@ -88,10 +89,15 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
   }
 
   @override
-  Future<CreateJobApiResponse> createJob(JobApiModel job) async {
+  Future<CreateJobApiResponse> createJob(
+    JobApiModel job, {
+    List<JobPhotoUpload> photoUploads = const [],
+  }) async {
     final response = await apiClient.post(
       ApiEndpoints.jobs,
-      data: job.toCreateJson(),
+      data: photoUploads.isEmpty
+          ? job.toCreateJson()
+          : _buildJobFormData(job.toCreateJson(), photoUploads),
     );
 
     final responseData = response.data;
@@ -116,7 +122,11 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
   }
 
   @override
-  Future<UpdateJobApiResponse> updateJob(String jobId, JobApiModel job) async {
+  Future<UpdateJobApiResponse> updateJob(
+    String jobId,
+    JobApiModel job, {
+    List<JobPhotoUpload> photoUploads = const [],
+  }) async {
     final data = job.toUpdateJson();
     if (data.isEmpty) {
       throw FormatException('At least one field is required.');
@@ -124,7 +134,7 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
 
     final response = await apiClient.patch(
       ApiEndpoints.jobById(jobId),
-      data: data,
+      data: photoUploads.isEmpty ? data : _buildJobFormData(data, photoUploads),
     );
 
     final responseData = response.data;
@@ -171,5 +181,34 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
     }
 
     return result;
+  }
+
+  FormData _buildJobFormData(
+    Map<String, dynamic> fields,
+    List<JobPhotoUpload> photoUploads,
+  ) {
+    final formData = FormData();
+
+    for (final entry in fields.entries) {
+      final value = entry.value;
+      if (value is List) {
+        for (final item in value) {
+          formData.fields.add(MapEntry(entry.key, item.toString()));
+        }
+      } else {
+        formData.fields.add(MapEntry(entry.key, value.toString()));
+      }
+    }
+
+    for (final photo in photoUploads) {
+      formData.files.add(
+        MapEntry(
+          'photos',
+          MultipartFile.fromBytes(photo.bytes, filename: photo.fileName),
+        ),
+      );
+    }
+
+    return formData;
   }
 }

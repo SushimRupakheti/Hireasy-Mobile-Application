@@ -43,7 +43,13 @@ class ApiClient {
       _dio.get(path, options: options);
 
   Future<Response<dynamic>> post(String path, {Object? data}) {
-    return _dio.post(path, data: data);
+    return _dio.post(
+      path,
+      data: data,
+      options: data is FormData
+          ? Options(contentType: Headers.multipartFormDataContentType)
+          : null,
+    );
   }
 
   Future<Response<dynamic>> put(String path, {Object? data}) {
@@ -51,7 +57,13 @@ class ApiClient {
   }
 
   Future<Response<dynamic>> patch(String path, {Object? data}) {
-    return _dio.patch(path, data: data);
+    return _dio.patch(
+      path,
+      data: data,
+      options: data is FormData
+          ? Options(contentType: Headers.multipartFormDataContentType)
+          : null,
+    );
   }
 
   Future<Response<dynamic>> delete(String path) => _dio.delete(path);

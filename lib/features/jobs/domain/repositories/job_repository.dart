@@ -1,4 +1,5 @@
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 
 abstract interface class IJobRepository {
   Future<List<JobEntity>> getJobs();
@@ -9,9 +10,16 @@ abstract interface class IJobRepository {
 
   Future<String> applyForJob(String jobId);
 
-  Future<JobEntity> createJob(JobEntity job);
+  Future<JobEntity> createJob(
+    JobEntity job, {
+    List<JobPhotoUpload> photoUploads = const [],
+  });
 
-  Future<JobEntity> updateJob(String jobId, JobEntity job);
+  Future<JobEntity> updateJob(
+    String jobId,
+    JobEntity job, {
+    List<JobPhotoUpload> photoUploads = const [],
+  });
 
   Future<String> deleteJob(String jobId);
 }

@@ -13,6 +13,7 @@ class JobEntity {
   final num pay;
   final String shift;
   final String location;
+  final String jobDate;
   final List<String> photos;
   final String description;
   final String status;
@@ -27,9 +28,10 @@ class JobEntity {
     required this.pay,
     required this.shift,
     required this.location,
+    this.jobDate = '',
     this.photos = const [],
     required this.description,
-    this.status = 'pending',
+    this.status = 'open',
     this.appliedWorkers = const [],
     this.applications = const [],
   });

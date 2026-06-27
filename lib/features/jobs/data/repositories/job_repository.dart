@@ -10,27 +10,32 @@ final jobRepositoryProvider = Provider<IJobRepository>((ref) {
 });
 
 class JobRepository implements IJobRepository {
-  final IJobRemoteDataSource _remoteDataSource;
+  final IJobRemoteDataSource remoteDataSource;
 
-  const JobRepository({required IJobRemoteDataSource remoteDataSource})
-    : _remoteDataSource = remoteDataSource;
+  const JobRepository({required this.remoteDataSource});
 
   @override
   Future<List<JobEntity>> getJobs() async {
-    final response = await _remoteDataSource.getJobs();
+    final response = await remoteDataSource.getJobs();
+    return response.jobs.map((job) => job.toEntity()).toList();
+  }
+
+  @override
+  Future<List<JobEntity>> getMyJobs() async {
+    final response = await remoteDataSource.getMyJobs();
     return response.jobs.map((job) => job.toEntity()).toList();
   }
 
   @override
   Future<String> applyForJob(String jobId) async {
-    final response = await _remoteDataSource.applyForJob(jobId);
+    final response = await remoteDataSource.applyForJob(jobId);
     return response.message;
   }
 
   @override
   Future<JobEntity> createJob(JobEntity job) async {
     final model = JobApiModel.fromEntity(job);
-    final response = await _remoteDataSource.createJob(model);
+    final response = await remoteDataSource.createJob(model);
     return response.job.toEntity();
   }
 }

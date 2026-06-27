@@ -6,6 +6,7 @@ import 'package:hireasy_mobile/features/auth/domain/usecase/get_current_user.dar
 import 'package:hireasy_mobile/features/jobs/domain/usecases/apply_for_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/create_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_jobs_usecase.dart';
+import 'package:hireasy_mobile/features/jobs/domain/usecases/get_my_jobs_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/state/job_state.dart';
 
 final jobViewModelProvider = NotifierProvider<JobViewModel, JobState>(
@@ -139,6 +140,32 @@ class JobViewModel extends Notifier<JobState> {
       state = state.copyWith(
         isFetchingJobs: false,
         errorMessage: apiErrorMessage(error, fallback: 'Unable to load jobs.'),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isFetchingJobs: false,
+        errorMessage: error.toString(),
+      );
+    }
+  }
+
+  Future<void> getMyJobs() async {
+    state = state.copyWith(isFetchingJobs: true, clearFeedback: true);
+
+    try {
+      final jobs = await ref.read(getMyJobsUsecaseProvider).call();
+      state = state.copyWith(
+        isFetchingJobs: false,
+        jobs: jobs,
+        clearFeedback: true,
+      );
+    } on DioException catch (error) {
+      state = state.copyWith(
+        isFetchingJobs: false,
+        errorMessage: apiErrorMessage(
+          error,
+          fallback: 'Unable to load your jobs.',
+        ),
       );
     } catch (error) {
       state = state.copyWith(

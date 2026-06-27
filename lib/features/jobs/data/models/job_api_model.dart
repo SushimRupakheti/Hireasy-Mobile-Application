@@ -8,6 +8,7 @@ class JobApiModel {
   final num pay;
   final String shift;
   final String location;
+  final String jobDate;
   final List<String> photos;
   final String description;
   final String status;
@@ -22,9 +23,10 @@ class JobApiModel {
     required this.pay,
     required this.shift,
     required this.location,
+    this.jobDate = '',
     this.photos = const [],
     required this.description,
-    this.status = 'pending',
+    this.status = 'open',
     this.appliedWorkers = const [],
     this.applications = const [],
   });
@@ -41,9 +43,10 @@ class JobApiModel {
       pay: _parseNum(json['pay']),
       shift: json['shift']?.toString() ?? '',
       location: json['location']?.toString() ?? '',
+      jobDate: (json['job_date'] ?? json['jobDate'])?.toString() ?? '',
       photos: _parseStringList(json['photos']),
       description: json['description']?.toString() ?? '',
-      status: json['status']?.toString() ?? 'pending',
+      status: json['status']?.toString() ?? 'open',
       appliedWorkers: applications
           .map((application) => application.workerId)
           .toList(),
@@ -60,6 +63,7 @@ class JobApiModel {
       pay: entity.pay,
       shift: entity.shift,
       location: entity.location,
+      jobDate: entity.jobDate,
       photos: entity.photos,
       description: entity.description,
       status: entity.status,
@@ -75,6 +79,7 @@ class JobApiModel {
       'pay': pay,
       'shift': shift,
       'location': location,
+      if (jobDate.isNotEmpty) 'job_date': jobDate,
       if (photos.isNotEmpty) 'photos': photos,
       'description': description,
       if (status.isNotEmpty) 'status': status,
@@ -90,6 +95,7 @@ class JobApiModel {
       pay: pay,
       shift: shift,
       location: location,
+      jobDate: jobDate,
       photos: photos,
       description: description,
       status: status,

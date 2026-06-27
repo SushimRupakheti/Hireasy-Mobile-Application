@@ -9,6 +9,7 @@ class CreateJobParams {
   final num pay;
   final String shift;
   final String location;
+  final String jobDate;
   final List<String> photos;
   final String description;
 
@@ -18,6 +19,7 @@ class CreateJobParams {
     required this.pay,
     required this.shift,
     required this.location,
+    required this.jobDate,
     this.photos = const [],
     required this.description,
   });
@@ -28,19 +30,19 @@ final createJobUsecaseProvider = Provider<CreateJobUsecase>((ref) {
 });
 
 class CreateJobUsecase {
-  final IJobRepository _jobRepository;
+  final IJobRepository jobRepository;
 
-  const CreateJobUsecase({required IJobRepository jobRepository})
-    : _jobRepository = jobRepository;
+  const CreateJobUsecase({required this.jobRepository});
 
   Future<JobEntity> call(CreateJobParams params) {
-    return _jobRepository.createJob(
+    return jobRepository.createJob(
       JobEntity(
         roleType: params.roleType.trim(),
         numberOfWorkers: params.numberOfWorkers,
         pay: params.pay,
         shift: params.shift,
         location: params.location.trim(),
+        jobDate: params.jobDate.trim(),
         photos: params.photos,
         description: params.description.trim(),
       ),

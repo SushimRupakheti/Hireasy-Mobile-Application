@@ -11,14 +11,28 @@ final jobRemoteDataSourceProvider = Provider<IJobRemoteDataSource>((ref) {
 });
 
 class JobRemoteDataSource implements IJobRemoteDataSource {
-  final ApiClient _apiClient;
+  final ApiClient apiClient;
 
-  const JobRemoteDataSource({required ApiClient apiClient})
-    : _apiClient = apiClient;
+  const JobRemoteDataSource({required this.apiClient});
 
   @override
   Future<GetJobsApiResponse> getJobs() async {
-    final response = await _apiClient.get(ApiEndpoints.jobs);
+    final response = await apiClient.get(ApiEndpoints.jobs);
+
+    try {
+      return GetJobsApiResponse.fromJson(response.data);
+    } on FormatException catch (error) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: error.message,
+      );
+    }
+  }
+
+  @override
+  Future<GetJobsApiResponse> getMyJobs() async {
+    final response = await apiClient.get(ApiEndpoints.myJobs);
 
     try {
       return GetJobsApiResponse.fromJson(response.data);
@@ -33,7 +47,7 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
 
   @override
   Future<ApplyJobApiResponse> applyForJob(String jobId) async {
-    final response = await _apiClient.post(ApiEndpoints.applyForJob(jobId));
+    final response = await apiClient.post(ApiEndpoints.applyForJob(jobId));
     final responseData = response.data;
 
     if (responseData is! Map) {
@@ -60,7 +74,7 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
 
   @override
   Future<CreateJobApiResponse> createJob(JobApiModel job) async {
-    final response = await _apiClient.post(
+    final response = await apiClient.post(
       ApiEndpoints.jobs,
       data: job.toCreateJson(),
     );

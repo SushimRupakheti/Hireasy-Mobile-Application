@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_home_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_my_jobs_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_post_job_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/individual_home_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/my_jobs_screen.dart';
@@ -16,8 +17,6 @@ class CollectiveScreen extends StatefulWidget {
 
 class _CollectiveScreenState extends State<CollectiveScreen> {
   int _currentIndex = 0;
-  String? _initialRoleType;
-  int _postScreenVersion = 0;
 
   bool get _isCompany {
     final role = widget.role.trim().toLowerCase();
@@ -29,11 +28,12 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
   }
 
   void _openPostJob([String? roleType]) {
-    setState(() {
-      _initialRoleType = roleType;
-      _postScreenVersion++;
-      _currentIndex = 1;
-    });
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CompanyPostJobScreen(initialRoleType: roleType),
+      ),
+    );
   }
 
   @override
@@ -42,12 +42,7 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
       _isCompany
           ? CompanyHomeScreen(onPostJobRequested: _openPostJob)
           : const IndividualHomeScreen(),
-      _isCompany
-          ? CompanyPostJobScreen(
-              key: ValueKey(_postScreenVersion),
-              initialRoleType: _initialRoleType,
-            )
-          : const MyJobsScreen(),
+      _isCompany ? const CompanyMyJobsScreen() : const MyJobsScreen(),
       const _PlaceholderScreen(
         icon: Icons.notifications_none_rounded,
         title: 'Notifications',
@@ -61,7 +56,7 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
       bottomNavigationBar: _CollectiveBottomNavigation(
         currentIndex: _currentIndex,
         onTap: _selectTab,
-        secondLabel: _isCompany ? 'Post job' : 'Applications',
+        secondLabel: _isCompany ? 'My Jobs' : 'Applications',
       ),
     );
   }

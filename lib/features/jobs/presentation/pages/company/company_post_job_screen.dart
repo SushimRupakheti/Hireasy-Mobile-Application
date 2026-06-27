@@ -22,10 +22,12 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
   final _payController = TextEditingController();
   final _workersController = TextEditingController();
   final _locationController = TextEditingController();
+  final _jobDateController = TextEditingController();
   final _photoController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   String? _selectedShift;
+  DateTime? _selectedJobDate;
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     _payController.dispose();
     _workersController.dispose();
     _locationController.dispose();
+    _jobDateController.dispose();
     _photoController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -65,6 +68,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
             pay: num.parse(_payController.text.trim()),
             shift: _selectedShift!,
             location: _locationController.text,
+            jobDate: _formatApiDate(_selectedJobDate!),
             photos: photoUrl.isEmpty ? const [] : [photoUrl],
             description: _descriptionController.text,
           ),
@@ -85,10 +89,44 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
       _payController.clear();
       _workersController.clear();
       _locationController.clear();
+      _jobDateController.clear();
       _photoController.clear();
       _descriptionController.clear();
-      setState(() => _selectedShift = null);
+      setState(() {
+        _selectedShift = null;
+        _selectedJobDate = null;
+      });
     }
+  }
+
+  Future<void> _pickJobDate() async {
+    FocusScope.of(context).unfocus();
+    final today = DateTime.now();
+    final firstDate = DateTime(today.year, today.month, today.day);
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedJobDate ?? firstDate,
+      firstDate: firstDate,
+      lastDate: DateTime(firstDate.year + 2, firstDate.month, firstDate.day),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF1F3D7A),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF172C5B),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate == null) return;
+    setState(() {
+      _selectedJobDate = pickedDate;
+      _jobDateController.text = _formatDisplayDate(pickedDate);
+    });
   }
 
   void _showMessage(String message, {required bool isError}) {
@@ -192,6 +230,24 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
                   validator: (value) => _required(value, 'Enter a location'),
                 ),
                 const SizedBox(height: 18),
+                _FieldLabel(label: 'Job Date'),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _jobDateController,
+                  readOnly: true,
+                  onTap: isLoading ? null : _pickJobDate,
+                  decoration: _inputDecoration(
+                    'Select the working date',
+                    suffixIcon: const Icon(
+                      Icons.calendar_today_rounded,
+                      color: Color(0xFF52617D),
+                      size: 20,
+                    ),
+                  ),
+                  validator: (_) =>
+                      _selectedJobDate == null ? 'Select a job date' : null,
+                ),
+                const SizedBox(height: 18),
                 _FieldLabel(label: 'Photo URL', suffix: ' (optional)'),
                 const SizedBox(height: 8),
                 _buildTextField(
@@ -273,12 +329,13 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String hintText) {
+  InputDecoration _inputDecoration(String hintText, {Widget? suffixIcon}) {
     return InputDecoration(
       hintText: hintText,
       hintStyle: const TextStyle(color: Color(0xFF949494)),
       filled: true,
       fillColor: const Color(0xFFF2F2F4),
+      suffixIcon: suffixIcon,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
@@ -323,6 +380,30 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
       return 'Enter a valid HTTP or HTTPS URL';
     }
     return null;
+  }
+
+  String _formatApiDate(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDisplayDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }
 

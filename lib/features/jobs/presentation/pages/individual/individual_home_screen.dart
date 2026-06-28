@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hireasy_mobile/core/api/token_service.dart';
+import 'package:hireasy_mobile/features/auth/domain/entities/auth_entity.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/job_details_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/providers/current_profile_provider.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/widgets/home_profile_avatar.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/job_card.dart';
 
 class IndividualHomeScreen extends ConsumerStatefulWidget {
@@ -35,6 +39,11 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(jobViewModelProvider);
+    final profile = ref.watch(currentProfileProvider);
+    final user = profile.maybeWhen(data: (user) => user, orElse: () => null);
+    final accountStatus = _accountStatusLabel(
+      user?.status ?? ref.watch(tokenServiceProvider).userStatus,
+    );
 
     // Only keep verified jobs
     final verifiedJobs = state.jobs
@@ -55,7 +64,13 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
       backgroundColor: const Color(0xFFF7F8FA),
       body: Column(
         children: [
-          _buildHeader(context),
+          _buildHeader(
+            context,
+            profile: user,
+            appliedJobsCount: state.appliedJobIds.length,
+            totalEarned: _totalEarned(state.jobs, state.applicationStatuses),
+            accountStatus: accountStatus,
+          ),
           _CategoryBar(
             categories: categories,
             selectedCategory: _selectedCategory,
@@ -91,8 +106,31 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
     }).toList();
   }
 
-  Widget _buildHeader(BuildContext context) {
+  num _totalEarned(List<JobEntity> jobs, Map<String, String> statuses) {
+    return jobs.where((job) {
+      final jobId = job.id;
+      if (jobId == null) return false;
+      final status = statuses[jobId]?.trim().toLowerCase();
+      return status == 'accepted' || status == 'completed';
+    }).fold<num>(0, (total, job) => total + job.pay);
+  }
+
+  String _accountStatusLabel(String? status) {
+    final normalized = status?.trim().toLowerCase() ?? '';
+    if (normalized == 'verified') return 'Verified';
+    if (normalized == 'rejected') return 'Rejected';
+    return 'Pending';
+  }
+
+  Widget _buildHeader(
+    BuildContext context, {
+    required AuthEntity? profile,
+    required int appliedJobsCount,
+    required num totalEarned,
+    required String accountStatus,
+  }) {
     final topPadding = MediaQuery.paddingOf(context).top;
+    final displayName = _userDisplayName(profile);
 
     return Container(
       width: double.infinity,
@@ -109,17 +147,18 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              HomeProfileAvatar(
                 radius: 27,
-                backgroundColor: Colors.white24,
-                backgroundImage: AssetImage('assets/images/worker.png'),
+                imageUrl: profile?.profileImage,
+                fallbackAsset: 'assets/images/worker.png',
+                fallbackText: displayName,
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Welcome back',
                       style: TextStyle(
                         color: Colors.white70,
@@ -127,10 +166,12 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    SizedBox(height: 3),
+                    const SizedBox(height: 3),
                     Text(
-                      'Find your next job',
-                      style: TextStyle(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
@@ -176,12 +217,26 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _StatCircle(icon: Icons.work_outline_rounded, title: 'Jobs'),
-              _StatCircle(icon: Icons.send_outlined, title: 'Applied'),
-              _StatCircle(icon: Icons.bookmark_border_rounded, title: 'Saved'),
+              _StatCircle(
+                value: appliedJobsCount.toString(),
+                title: 'Applied Jobs',
+                icon: Icons.send_outlined,
+              ),
+              _StatCircle(
+                value: '\$${_formatPay(totalEarned)}',
+                title: 'Total Earned',
+                icon: Icons.payments_outlined,
+              ),
+              _StatCircle(
+                value: accountStatus,
+                title: 'Status',
+                icon: _statusIcon(accountStatus),
+                iconColor: Colors.white,
+                iconBackgroundColor: _statusColor(accountStatus),
+              ),
             ],
           ),
         ],
@@ -249,6 +304,41 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
     return pay == pay.roundToDouble()
         ? pay.toInt().toString()
         : pay.toStringAsFixed(2);
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'verified':
+        return Icons.verified_rounded;
+      case 'rejected':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.schedule_rounded;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'verified':
+        return const Color(0xFF38C95B);
+      case 'rejected':
+        return const Color(0xFFE90012);
+      default:
+        return const Color(0xFFD5D91C);
+    }
+  }
+
+  String _userDisplayName(AuthEntity? profile) {
+    final fullName = [
+      profile?.firstName?.trim(),
+      profile?.lastName?.trim(),
+    ].whereType<String>().where((name) => name.isNotEmpty).join(' ');
+    if (fullName.isNotEmpty) return fullName;
+
+    final email = profile?.email.trim() ?? '';
+    if (email.isNotEmpty) return email;
+
+    return 'Worker';
   }
 }
 
@@ -320,30 +410,57 @@ class _MessageButton extends StatelessWidget {
 }
 
 class _StatCircle extends StatelessWidget {
+  final String value;
   final IconData icon;
   final String title;
+  final Color iconColor;
+  final Color iconBackgroundColor;
 
-  const _StatCircle({required this.icon, required this.title});
+  const _StatCircle({
+    required this.value,
+    required this.icon,
+    required this.title,
+    this.iconColor = const Color(0xFF18346F),
+    this.iconBackgroundColor = Colors.white,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 29,
-          backgroundColor: Colors.white,
-          child: Icon(icon, color: const Color(0xFF18346F), size: 23),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+    return SizedBox(
+      width: 96,
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 29,
+            backgroundColor: iconBackgroundColor,
+            child: Icon(icon, color: iconColor, size: 23),
           ),
-        ),
-      ],
+          const SizedBox(height: 7),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

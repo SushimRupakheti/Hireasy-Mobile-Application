@@ -8,6 +8,7 @@ import 'package:hireasy_mobile/features/jobs/domain/usecases/apply_for_job_useca
 import 'package:hireasy_mobile/features/jobs/domain/usecases/create_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/delete_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_jobs_usecase.dart';
+import 'package:hireasy_mobile/features/jobs/domain/usecases/get_my_applications_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_my_jobs_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/update_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/state/job_state.dart';
@@ -103,8 +104,8 @@ class JobViewModel extends Notifier<JobState> {
     try {
       final jobs = await ref.read(getJobsUsecaseProvider).call();
       final userId = ref.read(tokenServiceProvider).userId;
-      final appliedJobIds = userId == null || userId.isEmpty
-          ? state.appliedJobIds
+      final serverAppliedJobIds = userId == null || userId.isEmpty
+          ? <String>{}
           : jobs
                 .where(
                   (job) =>
@@ -116,8 +117,8 @@ class JobViewModel extends Notifier<JobState> {
                 .map((job) => job.id)
                 .whereType<String>()
                 .toSet();
-      final applicationStatuses = userId == null || userId.isEmpty
-          ? state.applicationStatuses
+      final serverApplicationStatuses = userId == null || userId.isEmpty
+          ? <String, String>{}
           : <String, String>{
               for (final job in jobs)
                 if (job.id != null)
@@ -132,6 +133,20 @@ class JobViewModel extends Notifier<JobState> {
                     ))
                   job.id!: 'pending',
             };
+      final appliedJobIds = {
+        ...state.appliedJobIds,
+        ...state.applicationStatuses.keys,
+        ...serverAppliedJobIds,
+        ...serverApplicationStatuses.keys,
+      };
+      final applicationStatuses = {
+        ...state.applicationStatuses,
+        ...serverApplicationStatuses,
+        for (final jobId in appliedJobIds)
+          if (!state.applicationStatuses.containsKey(jobId) &&
+              !serverApplicationStatuses.containsKey(jobId))
+            jobId: 'pending',
+      };
       state = state.copyWith(
         isFetchingJobs: false,
         jobs: jobs,
@@ -168,6 +183,48 @@ class JobViewModel extends Notifier<JobState> {
         errorMessage: apiErrorMessage(
           error,
           fallback: 'Unable to load your jobs.',
+        ),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isFetchingJobs: false,
+        errorMessage: error.toString(),
+      );
+    }
+  }
+
+  Future<void> getMyApplications() async {
+    state = state.copyWith(isFetchingJobs: true, clearFeedback: true);
+
+    try {
+      final result = await ref.read(getMyApplicationsUsecaseProvider).call();
+      final appliedJobIds = result.jobs
+          .map((job) => job.id)
+          .whereType<String>()
+          .toSet();
+      state = state.copyWith(
+        isFetchingJobs: false,
+        jobs: result.jobs,
+        appliedJobIds: {
+          ...state.appliedJobIds,
+          ...appliedJobIds,
+          ...result.applicationStatuses.keys,
+        },
+        applicationStatuses: {
+          ...state.applicationStatuses,
+          ...result.applicationStatuses,
+          for (final jobId in appliedJobIds)
+            if (!result.applicationStatuses.containsKey(jobId))
+              jobId: 'pending',
+        },
+        clearFeedback: true,
+      );
+    } on DioException catch (error) {
+      state = state.copyWith(
+        isFetchingJobs: false,
+        errorMessage: apiErrorMessage(
+          error,
+          fallback: 'Unable to load your applications.',
         ),
       );
     } catch (error) {

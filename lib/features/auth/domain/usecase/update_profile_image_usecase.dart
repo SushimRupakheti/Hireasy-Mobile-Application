@@ -1,13 +1,18 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hireasy_mobile/core/api/token_service.dart';
 import 'package:hireasy_mobile/features/auth/data/repositories/auth_repository.dart';
 import 'package:hireasy_mobile/features/auth/domain/entities/auth_entity.dart';
 import 'package:hireasy_mobile/features/auth/domain/repositories/auth_repository.dart';
 
 class UpdateProfileImageUsecaseParams {
-  final String profileImage;
+  final String fileName;
+  final Uint8List bytes;
 
-  const UpdateProfileImageUsecaseParams({required this.profileImage});
+  const UpdateProfileImageUsecaseParams({
+    required this.fileName,
+    required this.bytes,
+  });
 }
 
 final updateProfileImageUsecaseProvider = Provider<UpdateProfileImageUsecase>((
@@ -15,29 +20,38 @@ final updateProfileImageUsecaseProvider = Provider<UpdateProfileImageUsecase>((
 ) {
   return UpdateProfileImageUsecase(
     authRepository: ref.read(authRepositoryProvider),
-    tokenService: ref.read(tokenServiceProvider),
   );
 });
 
 class UpdateProfileImageUsecase {
   final IAuthRepository _authRepository;
-  final TokenService _tokenService;
 
   const UpdateProfileImageUsecase({
     required IAuthRepository authRepository,
-    required TokenService tokenService,
-  }) : _authRepository = authRepository,
-       _tokenService = tokenService;
+  }) : _authRepository = authRepository;
 
   Future<AuthEntity?> call(UpdateProfileImageUsecaseParams params) {
-    final authId = _tokenService.userId;
-    if (authId == null || authId.isEmpty) {
-      return Future.value();
+    if (params.bytes.isEmpty) {
+      throw const FormatException('The selected image is empty.');
+    }
+    if (params.bytes.length > 5 * 1024 * 1024) {
+      throw const FormatException('The image must be 5 MB or smaller.');
+    }
+    if (!_isAllowedImage(params.fileName)) {
+      throw const FormatException('Only JPG, PNG or WEBP images are allowed.');
     }
 
-    return _authRepository.updateProfileImage(
-      authId,
-      params.profileImage.trim(),
+    return _authRepository.uploadProfilePicture(
+      fileName: params.fileName,
+      bytes: params.bytes,
     );
+  }
+
+  bool _isAllowedImage(String fileName) {
+    final extension = fileName.split('.').last.trim().toLowerCase();
+    return extension == 'jpg' ||
+        extension == 'jpeg' ||
+        extension == 'png' ||
+        extension == 'webp';
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
@@ -16,16 +18,22 @@ class CompanyMyJobsScreen extends ConsumerStatefulWidget {
 
 class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
   final _searchController = TextEditingController();
+  Timer? _jobsRefreshTimer;
   DateTime? _selectedDate;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(jobViewModelProvider.notifier).getMyJobs());
+    Future.microtask(_refreshJobs);
+    _jobsRefreshTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshJobs(),
+    );
   }
 
   @override
   void dispose() {
+    _jobsRefreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -151,6 +159,11 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
         first.day == second.day;
   }
 
+  Future<void> _refreshJobs() async {
+    if (!mounted || ref.read(jobViewModelProvider).isFetchingJobs) return;
+    await ref.read(jobViewModelProvider.notifier).getMyJobs();
+  }
+
   Widget _buildBody({required List<JobEntity> jobs, required JobState state}) {
     if (state.isFetchingJobs && state.jobs.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -161,7 +174,7 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
         title: 'Could not load your jobs',
         message: state.errorMessage!,
         buttonText: 'Try again',
-        onPressed: () => ref.read(jobViewModelProvider.notifier).getMyJobs(),
+        onPressed: _refreshJobs,
       );
     }
     if (jobs.isEmpty) {
@@ -173,7 +186,7 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(jobViewModelProvider.notifier).getMyJobs(),
+      onRefresh: _refreshJobs,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),

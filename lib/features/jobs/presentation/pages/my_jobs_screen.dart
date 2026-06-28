@@ -15,19 +15,15 @@ class MyJobsScreen extends ConsumerStatefulWidget {
 
 class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
   final _searchController = TextEditingController();
-  late DateTime _selectedDate;
+  DateTime? _selectedDate;
+  bool _hasLoadedApplications = false;
+  bool _isLoadingApplications = false;
+  bool _hasRequestedApplications = false;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _selectedDate = DateTime(now.year, now.month, now.day);
-    Future.microtask(() {
-      final state = ref.read(jobViewModelProvider);
-      if (state.jobs.isEmpty && !state.isFetchingJobs) {
-        ref.read(jobViewModelProvider.notifier).getJobs();
-      }
-    });
+    Future.microtask(_loadApplications);
   }
 
   @override
@@ -39,8 +35,14 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(jobViewModelProvider);
-    final appliedJobs = state.jobs
-        .where((job) => job.id != null && state.appliedJobIds.contains(job.id))
+    if (!_hasLoadedApplications &&
+        !_hasRequestedApplications &&
+        !_isLoadingApplications &&
+        !state.isFetchingJobs) {
+      Future.microtask(_loadApplications);
+    }
+    final appliedJobs = (_hasLoadedApplications ? state.jobs : <JobEntity>[])
+        .where(_matchesSelectedDate)
         .where(_matchesSearch)
         .toList();
 
@@ -102,7 +104,9 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  _fullDate(_selectedDate),
+                  _selectedDate == null
+                      ? 'All posted jobs'
+                      : _fullDate(_selectedDate!),
                   style: const TextStyle(
                     color: Color(0xFF252832),
                     fontSize: 13,
@@ -134,29 +138,76 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
         job.description.toLowerCase().contains(query);
   }
 
+  bool _matchesSelectedDate(JobEntity job) {
+    final selectedDate = _selectedDate;
+    if (selectedDate == null) return true;
+
+    final jobDate = _parseJobDate(job.jobDate);
+    if (jobDate == null) return false;
+    return _sameDay(jobDate, selectedDate);
+  }
+
+  DateTime? _parseJobDate(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty) return null;
+    return DateTime.tryParse(trimmedValue);
+  }
+
+  bool _sameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  Future<void> _loadApplications() async {
+    if (_isLoadingApplications ||
+        ref.read(jobViewModelProvider).isFetchingJobs) {
+      return;
+    }
+    setState(() {
+      _hasLoadedApplications = false;
+      _isLoadingApplications = true;
+      _hasRequestedApplications = true;
+    });
+    await ref.read(jobViewModelProvider.notifier).getMyApplications();
+    if (!mounted) return;
+    final hasError = ref.read(jobViewModelProvider).errorMessage != null;
+    setState(() {
+      _hasLoadedApplications = !hasError;
+      _isLoadingApplications = false;
+    });
+  }
+
   Widget _buildBody({required List<JobEntity> jobs, required JobState state}) {
-    if (state.isFetchingJobs && state.jobs.isEmpty) {
+    if (!_hasLoadedApplications &&
+        (state.isFetchingJobs || _isLoadingApplications)) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (state.errorMessage != null && state.jobs.isEmpty) {
-      return _EmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: 'Could not load your jobs',
-        message: state.errorMessage!,
-        buttonText: 'Try again',
-        onPressed: () => ref.read(jobViewModelProvider.notifier).getJobs(),
+    if (state.errorMessage != null && jobs.isEmpty) {
+      return _RefreshableState(
+        onRefresh: _loadApplications,
+        child: _EmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Could not load your jobs',
+          message: state.errorMessage!,
+          buttonText: 'Try again',
+          onPressed: _loadApplications,
+        ),
       );
     }
     if (jobs.isEmpty) {
-      return const _EmptyState(
-        icon: Icons.work_history_outlined,
-        title: 'No applications found',
-        message: 'Jobs you apply for will appear here.',
+      return _RefreshableState(
+        onRefresh: _loadApplications,
+        child: const _EmptyState(
+          icon: Icons.work_history_outlined,
+          title: 'No applications found',
+          message: 'Jobs you apply for will appear here.',
+        ),
       );
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(jobViewModelProvider.notifier).getJobs(),
+      onRefresh: _loadApplications,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -225,16 +276,21 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
 }
 
 class _DateSelector extends StatelessWidget {
-  final DateTime selectedDate;
-  final ValueChanged<DateTime> onSelected;
+  static const _primaryColor = Color(0xFF203E7B);
+
+  final DateTime? selectedDate;
+  final ValueChanged<DateTime?> onSelected;
 
   const _DateSelector({required this.selectedDate, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final currentDate = DateTime(today.year, today.month, today.day);
+    final anchorDate = selectedDate ?? currentDate;
     final dates = List.generate(
       7,
-      (index) => selectedDate.add(Duration(days: index - 3)),
+      (index) => anchorDate.add(Duration(days: index - 3)),
     );
 
     return SizedBox(
@@ -246,21 +302,26 @@ class _DateSelector extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 11),
         itemBuilder: (context, index) {
           final date = dates[index];
-          final selected = _sameDay(date, selectedDate);
+          final selected =
+              selectedDate != null && _sameDay(date, selectedDate!);
+          final isToday = _sameDay(date, currentDate);
+          final borderColor = selected || isToday
+              ? _primaryColor
+              : const Color(0xFFD5D8DF);
+          final borderWidth = selected || isToday ? 1.5 : 1.0;
           return InkWell(
-            onTap: () => onSelected(date),
+            onTap: () => onSelected(selected ? null : date),
             borderRadius: BorderRadius.circular(8),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               width: 71,
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFF203E7B) : Colors.white,
+                color: selected ? _primaryColor : Colors.white,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: selected
-                      ? const Color(0xFF203E7B)
-                      : const Color(0xFFD5D8DF),
+                  color: borderColor,
+                  width: borderWidth,
                 ),
                 boxShadow: selected
                     ? null
@@ -335,6 +396,31 @@ class _DateSelector extends StatelessWidget {
   String _weekday(int weekday) {
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return weekdays[weekday - 1];
+  }
+}
+
+class _RefreshableState extends StatelessWidget {
+  final Future<void> Function() onRefresh;
+  final Widget child;
+
+  const _RefreshableState({required this.onRefresh, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 

@@ -1,4 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hireasy_mobile/core/api/token_service.dart';
+import 'package:hireasy_mobile/features/auth/domain/entities/auth_entity.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/providers/current_profile_provider.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/widgets/home_profile_avatar.dart';
 
 import '../../widgets/worker_category_card.dart';
 
@@ -9,17 +18,18 @@ class _WorkerCategory {
   const _WorkerCategory({required this.title, required this.imagePath});
 }
 
-class CompanyHomeScreen extends StatefulWidget {
+class CompanyHomeScreen extends ConsumerStatefulWidget {
   final ValueChanged<String?>? onPostJobRequested;
 
   const CompanyHomeScreen({super.key, this.onPostJobRequested});
 
   @override
-  State<CompanyHomeScreen> createState() => _CompanyHomeScreenState();
+  ConsumerState<CompanyHomeScreen> createState() => _CompanyHomeScreenState();
 }
 
-class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
+class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
   final _searchController = TextEditingController();
+  Timer? _statsRefreshTimer;
 
   static const _categories = [
     _WorkerCategory(
@@ -42,7 +52,18 @@ class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
   static const _navyBlue = Color(0xFF18346F);
 
   @override
+  void initState() {
+    super.initState();
+    Future.microtask(_refreshStats);
+    _statsRefreshTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshStats(),
+    );
+  }
+
+  @override
   void dispose() {
+    _statsRefreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -50,6 +71,12 @@ class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final categories = _filteredCategories;
+    final jobState = ref.watch(jobViewModelProvider);
+    final profile = ref.watch(currentProfileProvider);
+    final user = profile.maybeWhen(data: (user) => user, orElse: () => null);
+    final accountStatus = _accountStatusLabel(
+      user?.status ?? ref.watch(tokenServiceProvider).userStatus,
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8FA),
@@ -62,7 +89,14 @@ class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
       ),
       body: Column(
         children: [
-          _buildHeader(context),
+          _buildHeader(
+            context,
+            profile: user,
+            postedJobsCount: jobState.jobs.length,
+            activeJobsCount: jobState.jobs.where(_isActiveJob).length,
+            accountStatus: accountStatus,
+            isLoadingStats: jobState.isFetchingJobs && jobState.jobs.isEmpty,
+          ),
           const _SectionTitle(),
           Expanded(
             child: categories.isEmpty
@@ -98,8 +132,40 @@ class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
     widget.onPostJobRequested?.call(roleType);
   }
 
-  Widget _buildHeader(BuildContext context) {
+  void _refreshStats() {
+    if (!mounted || ref.read(jobViewModelProvider).isFetchingJobs) return;
+    ref.read(jobViewModelProvider.notifier).getMyJobs();
+  }
+
+  bool _isActiveJob(JobEntity job) {
+    final status = job.status.trim().toLowerCase();
+    return status.isEmpty ||
+        status == 'open' ||
+        status == 'active' ||
+        status == 'verified' ||
+        status == 'in progress' ||
+        status == 'in_progress';
+  }
+
+  String _accountStatusLabel(String? status) {
+    final normalized = status?.trim().toLowerCase() ?? '';
+    if (normalized == 'verified') return 'Verified';
+    if (normalized == 'rejected') return 'Rejected';
+    return 'Pending';
+  }
+
+  Widget _buildHeader(
+    BuildContext context, {
+    required AuthEntity? profile,
+    required int postedJobsCount,
+    required int activeJobsCount,
+    required String accountStatus,
+    required bool isLoadingStats,
+  }) {
     final topPadding = MediaQuery.paddingOf(context).top;
+    final postedJobsValue = isLoadingStats ? '...' : postedJobsCount.toString();
+    final activeJobsValue = isLoadingStats ? '...' : activeJobsCount.toString();
+    final displayName = _companyDisplayName(profile);
 
     return Container(
       width: double.infinity,
@@ -115,28 +181,29 @@ class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              HomeProfileAvatar(
                 radius: 28,
-                backgroundColor: Colors.white24,
-                backgroundImage: AssetImage('assets/images/client.png'),
+                imageUrl: profile?.profileImage,
+                fallbackAsset: 'assets/images/client.png',
+                fallbackText: displayName,
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Daraz Nepal',
+                      displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: 3),
-                    Text(
+                    const SizedBox(height: 3),
+                    const Text(
                       'Welcome Back!',
                       style: TextStyle(
                         color: Colors.white,
@@ -191,17 +258,67 @@ class _CompanyHomeScreenState extends State<CompanyHomeScreen> {
             ),
           ),
           const SizedBox(height: 30),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _StatWidget(title: 'Stats 1'),
-              _StatWidget(title: 'Stats 2'),
-              _StatWidget(title: 'Stats 3'),
+              _StatWidget(
+                value: postedJobsValue,
+                title: 'Jobs Posted',
+                icon: Icons.work_outline_rounded,
+              ),
+              _StatWidget(
+                value: activeJobsValue,
+                title: 'Active Jobs',
+                icon: Icons.task_alt_rounded,
+              ),
+              _StatWidget(
+                value: accountStatus,
+                title: 'Status',
+                icon: _statusIcon(accountStatus),
+                iconColor: Colors.white,
+                iconBackgroundColor: _statusColor(accountStatus),
+              ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'verified':
+        return Icons.verified_rounded;
+      case 'rejected':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.schedule_rounded;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'verified':
+      case 'open':
+      case 'opened':
+        return const Color(0xFF38C95B);
+      case 'rejected':
+        return const Color(0xFFE90012);
+      case 'closed':
+        return const Color(0xFF8E929B);
+      default:
+        return const Color(0xFFD5D91C);
+    }
+  }
+
+  String _companyDisplayName(AuthEntity? profile) {
+    final companyName = profile?.companyName?.trim() ?? '';
+    if (companyName.isNotEmpty) return companyName;
+
+    final email = profile?.email.trim() ?? '';
+    if (email.isNotEmpty) return email;
+
+    return 'Company';
   }
 }
 
@@ -246,33 +363,57 @@ class _MessageButton extends StatelessWidget {
 }
 
 class _StatWidget extends StatelessWidget {
+  final String value;
   final String title;
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackgroundColor;
 
-  const _StatWidget({required this.title});
+  const _StatWidget({
+    required this.value,
+    required this.title,
+    required this.icon,
+    this.iconColor = const Color(0xFF121212),
+    this.iconBackgroundColor = Colors.white,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const CircleAvatar(
-          radius: 34,
-          backgroundColor: Colors.white,
-          child: Icon(
-            Icons.bar_chart_rounded,
-            color: Color(0xFF121212),
-            size: 24,
+    return SizedBox(
+      width: 92,
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 34,
+            backgroundColor: iconBackgroundColor,
+            child: Icon(icon, color: iconColor, size: 24),
           ),
-        ),
-        const SizedBox(height: 13),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
+          const SizedBox(height: 8),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

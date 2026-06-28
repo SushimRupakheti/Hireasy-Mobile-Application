@@ -36,7 +36,7 @@ class JobApiModel {
       json['applications'] ?? json['appliedWorkers'],
     );
     return JobApiModel(
-      id: json['_id']?.toString(),
+      id: (json['_id'] ?? json['id'])?.toString(),
       companyId: _parseCompanyId(json['companyId']),
       roleType: json['roleType']?.toString() ?? '',
       numberOfWorkers: _parseInt(json['numberOfWorkers']),

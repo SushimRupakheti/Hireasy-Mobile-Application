@@ -7,7 +7,10 @@ abstract interface class IAuthRepository {
   Future<AuthEntity?> login(String email, String password);
   Future<void> logout();
   Future<AuthEntity?> getCurrentUser(String authId);
-  Future<AuthEntity?> updateProfileImage(String authId, String profileImage);
+  Future<AuthEntity?> uploadProfilePicture({
+    required String fileName,
+    required Uint8List bytes,
+  });
   Future<AuthEntity?> uploadDocument({
     required String fileName,
     required Uint8List bytes,

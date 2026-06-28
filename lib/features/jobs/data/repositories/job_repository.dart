@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/features/jobs/data/datasources/job_datasource.dart';
 import 'package:hireasy_mobile/features/jobs/data/datasources/job_remote_datasource.dart';
 import 'package:hireasy_mobile/features/jobs/data/models/job_api_model.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/applied_jobs_result.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/repositories/job_repository.dart';
@@ -25,6 +26,23 @@ class JobRepository implements IJobRepository {
   Future<List<JobEntity>> getMyJobs() async {
     final response = await remoteDataSource.getMyJobs();
     return response.jobs.map((job) => job.toEntity()).toList();
+  }
+
+  @override
+  Future<AppliedJobsResult> getMyApplications() async {
+    final response = await remoteDataSource.getMyApplications();
+    return AppliedJobsResult(
+      jobs: response.jobs.map((job) => job.toEntity()).toList(),
+      applicationStatuses: response.applicationStatuses,
+      pagination: AppliedJobsPagination(
+        page: response.pagination?.page,
+        limit: response.pagination?.limit,
+        total: response.pagination?.total,
+        totalPages: response.pagination?.totalPages,
+        hasNextPage: response.pagination?.hasNextPage,
+        hasPreviousPage: response.pagination?.hasPreviousPage,
+      ),
+    );
   }
 
   @override

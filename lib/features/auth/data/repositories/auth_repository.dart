@@ -43,13 +43,14 @@ class AuthRepository implements IAuthRepository {
   }
 
   @override
-  Future<AuthEntity?> updateProfileImage(
-    String authId,
-    String profileImage,
-  ) async {
-    final user = await _authRemoteDataSource.updateUser(authId, {
-      'profileImage': profileImage,
-    });
+  Future<AuthEntity?> uploadProfilePicture({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final user = await _authRemoteDataSource.uploadProfilePicture(
+      fileName: fileName,
+      bytes: bytes,
+    );
     return user?.toEntity();
   }
 

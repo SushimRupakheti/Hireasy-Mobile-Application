@@ -2,16 +2,15 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hireasy_mobile/core/api/api_endpoints.dart';
 import 'package:hireasy_mobile/core/api/api_error_message.dart';
 import 'package:hireasy_mobile/features/auth/domain/entities/auth_entity.dart';
-import 'package:hireasy_mobile/features/auth/domain/usecase/get_current_user.dart';
 import 'package:hireasy_mobile/features/auth/domain/usecase/logout_usecase.dart';
 import 'package:hireasy_mobile/features/auth/domain/usecase/manage_document_usecase.dart';
+import 'package:hireasy_mobile/features/auth/domain/usecase/update_profile_image_usecase.dart';
 import 'package:hireasy_mobile/features/auth/presentation/pages/login_screen.dart';
-
-final currentProfileProvider = FutureProvider.autoDispose<AuthEntity?>((ref) {
-  return ref.read(getCurrentUserUsecaseProvider).call();
-});
+import 'package:hireasy_mobile/features/jobs/presentation/providers/current_profile_provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -45,6 +44,8 @@ class ProfileScreen extends ConsumerWidget {
                 onDownloadDocument: () =>
                     _downloadDocument(context, ref, user.document),
                 onDeleteDocument: () => _deleteDocument(context, ref),
+                onUploadProfilePicture: () =>
+                    _uploadProfilePicture(context, ref),
                 onLogout: () => _logout(context, ref),
               ),
             );
@@ -138,7 +139,110 @@ class ProfileScreen extends ConsumerWidget {
       if (!context.mounted) return;
       if (progressVisible) _closeProgress(context);
       _showMessage(context, error.message, isError: true);
+    } catch (_) {
+      if (!context.mounted) return;
+      if (progressVisible) _closeProgress(context);
+      _showMessage(
+        context,
+        'Unable to upload the document.',
+        isError: true,
+      );
     }
+  }
+
+  Future<void> _uploadProfilePicture(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final source = await _pickImageSource(context);
+    if (source == null || !context.mounted) return;
+
+    var progressVisible = false;
+    try {
+      final image = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+
+      if (!context.mounted) return;
+      _showProgress(context, 'Uploading profile picture...');
+      progressVisible = true;
+      final user = await ref
+          .read(updateProfileImageUsecaseProvider)
+          .call(
+            UpdateProfileImageUsecaseParams(
+              fileName: image.name,
+              bytes: await image.readAsBytes(),
+            ),
+          );
+      if (!context.mounted) return;
+      _closeProgress(context);
+      progressVisible = false;
+      ref.invalidate(currentProfileProvider);
+      _showMessage(
+        context,
+        user == null
+            ? 'Unable to upload the profile picture.'
+            : 'Profile picture updated successfully.',
+        isError: user == null,
+      );
+    } on DioException catch (error) {
+      if (!context.mounted) return;
+      if (progressVisible) _closeProgress(context);
+      _showMessage(
+        context,
+        apiErrorMessage(
+          error,
+          fallback: 'Unable to upload the profile picture.',
+        ),
+        isError: true,
+      );
+    } on FormatException catch (error) {
+      if (!context.mounted) return;
+      if (progressVisible) _closeProgress(context);
+      _showMessage(context, error.message, isError: true);
+    } catch (_) {
+      if (!context.mounted) return;
+      if (progressVisible) _closeProgress(context);
+      _showMessage(
+        context,
+        'Unable to upload the profile picture.',
+        isError: true,
+      );
+    }
+  }
+
+  Future<ImageSource?> _pickImageSource(BuildContext context) {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: const Text('Choose from gallery'),
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_camera_outlined),
+                  title: const Text('Take a photo'),
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _downloadDocument(
@@ -264,6 +368,7 @@ class _ProfileContent extends StatelessWidget {
   final VoidCallback onUploadDocument;
   final VoidCallback onDownloadDocument;
   final VoidCallback onDeleteDocument;
+  final VoidCallback onUploadProfilePicture;
   final VoidCallback onLogout;
 
   const _ProfileContent({
@@ -271,6 +376,7 @@ class _ProfileContent extends StatelessWidget {
     required this.onUploadDocument,
     required this.onDownloadDocument,
     required this.onDeleteDocument,
+    required this.onUploadProfilePicture,
     required this.onLogout,
   });
 
@@ -314,6 +420,13 @@ class _ProfileContent extends StatelessWidget {
                 fallbackText: displayName.isEmpty ? '?' : displayName[0],
               ),
               _VerificationBadge(status: status),
+              Positioned(
+                right: 2,
+                top: 2,
+                child: _ProfileImageEditButton(
+                  onPressed: onUploadProfilePicture,
+                ),
+              ),
             ],
           ),
         ),
@@ -436,6 +549,33 @@ class _VerificationBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileImageEditButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _ProfileImageEditButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF223E7F),
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: const SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            Icons.photo_camera_outlined,
+            color: Colors.white,
+            size: 18,
+          ),
+        ),
       ),
     );
   }
@@ -580,6 +720,7 @@ class _ProfileImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cleanImageUrl = imageUrl?.trim() ?? '';
+    final resolvedImageUrl = _resolveProfileImageUrl(cleanImageUrl);
     return Container(
       width: 110,
       height: 110,
@@ -592,11 +733,22 @@ class _ProfileImage extends StatelessWidget {
       child: cleanImageUrl.isEmpty
           ? _fallback()
           : Image.network(
-              cleanImageUrl,
+              resolvedImageUrl,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => _fallback(),
             ),
     );
+  }
+
+  String _resolveProfileImageUrl(String imageUrl) {
+    final uri = Uri.tryParse(imageUrl);
+    if (uri != null && uri.hasScheme) return imageUrl;
+
+    final baseUri = Uri.parse(ApiEndpoints.baseUrl);
+    final origin = '${baseUri.scheme}://${baseUri.authority}';
+    final cleanImageUrl = imageUrl.replaceAll('\\', '/');
+    if (cleanImageUrl.startsWith('/')) return '$origin$cleanImageUrl';
+    return '$origin/$cleanImageUrl';
   }
 
   Widget _fallback() {

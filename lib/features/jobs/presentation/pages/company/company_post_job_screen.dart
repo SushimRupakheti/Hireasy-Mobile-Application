@@ -17,8 +17,6 @@ class CompanyPostJobScreen extends ConsumerStatefulWidget {
 }
 
 class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
-  static const _shiftOptions = ['Morning', 'Night', 'Rotational', 'Full Day'];
-
   final _formKey = GlobalKey<FormState>();
   final _roleTypeController = TextEditingController();
   final _payController = TextEditingController();
@@ -28,8 +26,10 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
   final _descriptionController = TextEditingController();
   final _imagePicker = ImagePicker();
   final List<XFile> _selectedPhotos = [];
+  final List<_ShiftTimeRange> _shiftRanges = [];
 
-  String? _selectedShift;
+  TimeOfDay? _shiftStartTime;
+  TimeOfDay? _shiftEndTime;
   DateTime? _selectedJobDate;
 
   @override
@@ -68,7 +68,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
             roleType: _roleTypeController.text,
             numberOfWorkers: int.parse(_workersController.text.trim()),
             pay: num.parse(_payController.text.trim()),
-            shift: _selectedShift!,
+            shift: _formatShiftRanges(),
             location: _locationController.text,
             jobDate: _formatApiDate(_selectedJobDate!),
             photoUploads: photoUploads,
@@ -94,7 +94,9 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
       _jobDateController.clear();
       _descriptionController.clear();
       setState(() {
-        _selectedShift = null;
+        _shiftStartTime = null;
+        _shiftEndTime = null;
+        _shiftRanges.clear();
         _selectedJobDate = null;
         _selectedPhotos.clear();
       });
@@ -208,19 +210,28 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
                 const SizedBox(height: 18),
                 _FieldLabel(label: 'Shift'),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedShift,
-                  decoration: _inputDecoration('Select a shift'),
-                  items: _shiftOptions
-                      .map(
-                        (shift) =>
-                            DropdownMenuItem(value: shift, child: Text(shift)),
-                      )
-                      .toList(),
-                  onChanged: isLoading
-                      ? null
-                      : (value) => setState(() => _selectedShift = value),
-                  validator: (value) => value == null ? 'Select a shift' : null,
+                FormField<List<_ShiftTimeRange>>(
+                  validator: (_) =>
+                      _shiftRanges.isEmpty ? 'Add at least one shift' : null,
+                  builder: (field) {
+                    return _ShiftPickerField(
+                      shifts: _shiftRanges,
+                      startTimeText: _formatNullableTime(_shiftStartTime),
+                      endTimeText: _formatNullableTime(_shiftEndTime),
+                      isEnabled: !isLoading,
+                      errorText: field.errorText,
+                      onStartTimePressed: _pickShiftStartTime,
+                      onEndTimePressed: _pickShiftEndTime,
+                      onAddPressed: () {
+                        _addShiftRange();
+                        field.didChange(_shiftRanges);
+                      },
+                      onRemovePressed: (shift) {
+                        setState(() => _shiftRanges.remove(shift));
+                        field.didChange(_shiftRanges);
+                      },
+                    );
+                  },
                 ),
                 const SizedBox(height: 18),
                 _FieldLabel(label: 'City/Location'),
@@ -316,6 +327,76 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     );
   }
 
+  Future<void> _pickShiftStartTime() async {
+    final pickedTime = await _pickShiftTime(_shiftStartTime);
+    if (pickedTime == null) return;
+    setState(() => _shiftStartTime = pickedTime);
+  }
+
+  Future<void> _pickShiftEndTime() async {
+    final pickedTime = await _pickShiftTime(_shiftEndTime);
+    if (pickedTime == null) return;
+    setState(() => _shiftEndTime = pickedTime);
+  }
+
+  Future<TimeOfDay?> _pickShiftTime(TimeOfDay? initialTime) {
+    FocusScope.of(context).unfocus();
+    return showTimePicker(
+      context: context,
+      initialTime: initialTime ?? TimeOfDay.now(),
+      initialEntryMode: TimePickerEntryMode.input,
+      helpText: 'Enter time',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF1F3D7A),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF172C5B),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+
+  void _addShiftRange() {
+    final startTime = _shiftStartTime;
+    final endTime = _shiftEndTime;
+    if (startTime == null || endTime == null) {
+      _showMessage('Select both start time and end time.', isError: true);
+      return;
+    }
+    final startMinutes = _timeInMinutes(startTime);
+    final endMinutes = _timeInMinutes(endTime);
+    if (endMinutes <= startMinutes) {
+      _showMessage(
+        'Invalid time schedule. End time must be after start time.',
+        isError: true,
+      );
+      return;
+    }
+    final overlapsExistingShift = _shiftRanges.any((shift) {
+      final existingStart = _timeInMinutes(shift.start);
+      final existingEnd = _timeInMinutes(shift.end);
+      return startMinutes < existingEnd && endMinutes > existingStart;
+    });
+    if (overlapsExistingShift) {
+      _showMessage(
+        'Invalid time schedule. Shift times cannot overlap.',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() {
+      _shiftRanges.add(_ShiftTimeRange(start: startTime, end: endTime));
+      _shiftStartTime = null;
+      _shiftEndTime = null;
+    });
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String hintText,
@@ -397,6 +478,21 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
+  String _formatNullableTime(TimeOfDay? time) {
+    return time == null ? '' : time.format(context);
+  }
+
+  String _formatShiftRanges() {
+    return _shiftRanges
+        .map(
+          (shift) =>
+              '${shift.start.format(context)} - ${shift.end.format(context)}',
+        )
+        .join(', ');
+  }
+
+  int _timeInMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
+
   Future<void> _pickFromCamera() async {
     if (_selectedPhotos.length >= 5) {
       _showMessage('You can add at most 5 photos.', isError: true);
@@ -445,6 +541,13 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
   }
 }
 
+class _ShiftTimeRange {
+  final TimeOfDay start;
+  final TimeOfDay end;
+
+  const _ShiftTimeRange({required this.start, required this.end});
+}
+
 class _FieldLabel extends StatelessWidget {
   final String label;
   final String? suffix;
@@ -468,6 +571,161 @@ class _FieldLabel extends StatelessWidget {
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShiftPickerField extends StatelessWidget {
+  final List<_ShiftTimeRange> shifts;
+  final String startTimeText;
+  final String endTimeText;
+  final bool isEnabled;
+  final String? errorText;
+  final VoidCallback onStartTimePressed;
+  final VoidCallback onEndTimePressed;
+  final VoidCallback onAddPressed;
+  final ValueChanged<_ShiftTimeRange> onRemovePressed;
+
+  const _ShiftPickerField({
+    required this.shifts,
+    required this.startTimeText,
+    required this.endTimeText,
+    required this.isEnabled,
+    required this.errorText,
+    required this.onStartTimePressed,
+    required this.onEndTimePressed,
+    required this.onAddPressed,
+    required this.onRemovePressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _TimePickerButton(
+                label: startTimeText.isEmpty ? 'Start time' : startTimeText,
+                isPlaceholder: startTimeText.isEmpty,
+                isEnabled: isEnabled,
+                onPressed: onStartTimePressed,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _TimePickerButton(
+                label: endTimeText.isEmpty ? 'End time' : endTimeText,
+                isPlaceholder: endTimeText.isEmpty,
+                isEnabled: isEnabled,
+                onPressed: onEndTimePressed,
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: FilledButton(
+                onPressed: isEnabled ? onAddPressed : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1F3D7A),
+                  disabledBackgroundColor: const Color(0xFF8190AF),
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Icon(Icons.add_rounded, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        if (errorText != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              errorText!,
+              style: const TextStyle(color: Color(0xFFB3261E), fontSize: 12),
+            ),
+          ),
+        ],
+        if (shifts.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final shift in shifts)
+                InputChip(
+                  label: Text(
+                    '${shift.start.format(context)} - '
+                    '${shift.end.format(context)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  avatar: const Icon(Icons.schedule_rounded, size: 18),
+                  onDeleted: isEnabled ? () => onRemovePressed(shift) : null,
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TimePickerButton extends StatelessWidget {
+  final String label;
+  final bool isPlaceholder;
+  final bool isEnabled;
+  final VoidCallback onPressed;
+
+  const _TimePickerButton({
+    required this.label,
+    required this.isPlaceholder,
+    required this.isEnabled,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFF2F2F4),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: isEnabled ? onPressed : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.access_time_rounded,
+                color: isEnabled
+                    ? const Color(0xFF52617D)
+                    : const Color(0xFF9BA4B5),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isPlaceholder
+                        ? const Color(0xFF949494)
+                        : const Color(0xFF1A1A1A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

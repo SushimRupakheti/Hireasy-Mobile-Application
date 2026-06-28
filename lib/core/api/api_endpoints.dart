@@ -137,10 +137,14 @@ class ApiEndpoints {
   static const String currentUserDocument = '/users/me/document';
   static const String downloadCurrentUserDocument =
       '/users/me/document/download';
+  static const String currentUserProfilePicture =
+      '/auth/me/profile-picture';
 
   // ================= JOB ENDPOINTS =================
   static const String jobs = '/jobs';
   static const String myJobs = '/jobs/mine';
+  static const String myApplications = '/jobs/me/applications';
+  static const String appliedJobs = '/jobs/applied';
   static String jobById(String jobId) => '/jobs/$jobId';
   static String applyForJob(String jobId) => '/jobs/$jobId/apply';
   static String jobApplicants(String jobId) => '/jobs/$jobId/applicants';

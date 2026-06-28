@@ -111,6 +111,21 @@ class AuthRemoteDatasource implements IAuthRemoteDataSource {
   }
 
   @override
+  Future<AuthApiModel?> uploadProfilePicture({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final formData = FormData.fromMap({
+      'profileImage': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    final response = await _apiClient.post(
+      ApiEndpoints.currentUserProfilePicture,
+      data: formData,
+    );
+    return _parseUserResponse(response);
+  }
+
+  @override
   Future<void> deleteDocument() async {
     await _apiClient.delete(ApiEndpoints.currentUserDocument);
   }
@@ -161,7 +176,10 @@ class AuthRemoteDatasource implements IAuthRemoteDataSource {
         message: 'The server returned an invalid user.',
       );
     }
-    final data = responseData['data'];
+    var data = responseData['data'] ?? responseData['user'];
+    if (data is Map && data['user'] is Map) {
+      data = data['user'];
+    }
     if (responseData['success'] == true && data is Map) {
       final user = AuthApiModel.fromJson(Map<String, dynamic>.from(data));
       if (user.id != null && user.id!.isNotEmpty) {

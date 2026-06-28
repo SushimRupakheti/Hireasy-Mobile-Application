@@ -43,6 +43,170 @@ class GetJobsApiResponse {
   }
 }
 
+class GetAppliedJobsApiResponse {
+  final List<JobApiModel> jobs;
+  final Map<String, String> applicationStatuses;
+  final AppliedJobsPaginationApiModel? pagination;
+
+  const GetAppliedJobsApiResponse({
+    required this.jobs,
+    required this.applicationStatuses,
+    this.pagination,
+  });
+
+  factory GetAppliedJobsApiResponse.fromJson(dynamic json) {
+    dynamic applicationsJson = json;
+    dynamic paginationJson;
+
+    if (json is Map) {
+      applicationsJson =
+          json['applications'] ??
+          json['appliedJobs'] ??
+          json['jobs'] ??
+          json['data'];
+      paginationJson = json['pagination'] ?? json['meta'];
+      if (applicationsJson is Map) {
+        paginationJson =
+            applicationsJson['pagination'] ??
+            applicationsJson['meta'] ??
+            paginationJson;
+        applicationsJson =
+            applicationsJson['applications'] ??
+            applicationsJson['appliedJobs'] ??
+            applicationsJson['jobs'] ??
+            applicationsJson['data'];
+      }
+    }
+
+    if (applicationsJson is! List) {
+      throw const FormatException(
+        'The server returned an invalid applications list.',
+      );
+    }
+
+    final jobs = <JobApiModel>[];
+    final statuses = <String, String>{};
+
+    for (final item in applicationsJson) {
+      if (item is! Map) continue;
+
+      final map = Map<String, dynamic>.from(item);
+      final nestedJob =
+          map['job'] ??
+          map['jobId'] ??
+          map['jobDetails'] ??
+          map['jobPost'] ??
+          map['jobPosting'];
+      final jobJson = nestedJob is Map ? nestedJob : map;
+      if (jobJson is! Map) continue;
+
+      final job = JobApiModel.fromJson(Map<String, dynamic>.from(jobJson));
+      jobs.add(job);
+
+      if (job.id == null || job.id!.isEmpty) continue;
+      statuses[job.id!] = _parseApplicationStatus(
+        map,
+        hasNestedJob: nestedJob is Map,
+      );
+    }
+
+    return GetAppliedJobsApiResponse(
+      jobs: jobs,
+      applicationStatuses: statuses,
+      pagination: AppliedJobsPaginationApiModel.fromJson(paginationJson),
+    );
+  }
+
+  static String _parseApplicationStatus(
+    Map<String, dynamic> map, {
+    required bool hasNestedJob,
+  }) {
+    final application = map['application'];
+    final applicationStatus = application is Map
+        ? application['status'] ??
+              application['applicationStatus'] ??
+              application['application_status']
+        : null;
+    final status =
+        map['myApplicationStatus'] ??
+        map['my_application_status'] ??
+        map['userApplicationStatus'] ??
+        map['user_application_status'] ??
+        map['applicationStatus'] ??
+        map['application_status'] ??
+        applicationStatus ??
+        _parseStatusCounts(map['applicationStatusCounts']) ??
+        (hasNestedJob ? map['status'] : null);
+    return _normalizeApplicationStatus(status);
+  }
+
+  static String? _parseStatusCounts(dynamic value) {
+    if (value is! Map) return null;
+    final entries = Map<String, dynamic>.from(value).entries.where((entry) {
+      final count = entry.value is num
+          ? entry.value as num
+          : num.tryParse(entry.value?.toString() ?? '') ?? 0;
+      return count > 0;
+    }).toList();
+    if (entries.length != 1) return null;
+    return entries.single.key.toString();
+  }
+
+  static String _normalizeApplicationStatus(dynamic value) {
+    final normalized = value?.toString().trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) return 'pending';
+    if (normalized == 'approved') return 'accepted';
+    if (normalized == 'declined') return 'rejected';
+    return normalized;
+  }
+}
+
+class AppliedJobsPaginationApiModel {
+  final int? page;
+  final int? limit;
+  final int? total;
+  final int? totalPages;
+  final bool? hasNextPage;
+  final bool? hasPreviousPage;
+
+  const AppliedJobsPaginationApiModel({
+    this.page,
+    this.limit,
+    this.total,
+    this.totalPages,
+    this.hasNextPage,
+    this.hasPreviousPage,
+  });
+
+  factory AppliedJobsPaginationApiModel.fromJson(dynamic json) {
+    if (json is! Map) return const AppliedJobsPaginationApiModel();
+    final map = Map<String, dynamic>.from(json);
+    return AppliedJobsPaginationApiModel(
+      page: _parseInt(map['page'] ?? map['currentPage']),
+      limit: _parseInt(map['limit'] ?? map['perPage']),
+      total: _parseInt(map['total'] ?? map['totalItems'] ?? map['count']),
+      totalPages: _parseInt(map['totalPages'] ?? map['pages']),
+      hasNextPage: _parseBool(map['hasNextPage'] ?? map['hasNext']),
+      hasPreviousPage: _parseBool(
+        map['hasPreviousPage'] ?? map['hasPrevPage'] ?? map['hasPrevious'],
+      ),
+    );
+  }
+
+  static int? _parseInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static bool? _parseBool(dynamic value) {
+    if (value is bool) return value;
+    final normalized = value?.toString().trim().toLowerCase();
+    if (normalized == 'true') return true;
+    if (normalized == 'false') return false;
+    return null;
+  }
+}
+
 class CreateJobApiResponse {
   final bool success;
   final String message;

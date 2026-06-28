@@ -13,6 +13,10 @@ abstract interface class IAuthRemoteDataSource {
     required String fileName,
     required Uint8List bytes,
   });
+  Future<AuthApiModel?> uploadProfilePicture({
+    required String fileName,
+    required Uint8List bytes,
+  });
   Future<void> deleteDocument();
   Future<Uint8List> downloadDocument();
 }

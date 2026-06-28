@@ -47,6 +47,33 @@ class JobRemoteDataSource implements IJobRemoteDataSource {
   }
 
   @override
+  Future<GetAppliedJobsApiResponse> getMyApplications() async {
+    Response<dynamic> response;
+    try {
+      response = await apiClient.get(ApiEndpoints.myApplications);
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode != 400 &&
+          statusCode != 404 &&
+          statusCode != 405 &&
+          statusCode != 500) {
+        rethrow;
+      }
+      response = await apiClient.get(ApiEndpoints.appliedJobs);
+    }
+
+    try {
+      return GetAppliedJobsApiResponse.fromJson(response.data);
+    } on FormatException catch (error) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        message: error.message,
+      );
+    }
+  }
+
+  @override
   Future<GetJobApplicantsApiResponse> getJobApplicants(String jobId) async {
     final response = await apiClient.get(ApiEndpoints.jobApplicants(jobId));
 

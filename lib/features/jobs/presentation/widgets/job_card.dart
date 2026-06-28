@@ -123,11 +123,20 @@ class _StatusBadge extends StatelessWidget {
     final normalized = status.trim().toLowerCase();
     final color = switch (normalized) {
       'accepted' => const Color(0xFF38C95B),
+      'open' => const Color(0xFF38C95B),
+      'opened' => const Color(0xFF38C95B),
+      'verified' => const Color(0xFF38C95B),
+      'pending' => const Color(0xFFD5D91C),
+      'closed' => const Color(0xFF8E929B),
       'rejected' => const Color(0xFFE90012),
       _ => const Color(0xFFD5D91C),
     };
     final icon = switch (normalized) {
       'accepted' => Icons.check_rounded,
+      'open' => Icons.check_rounded,
+      'opened' => Icons.check_rounded,
+      'verified' => Icons.verified_rounded,
+      'closed' => Icons.lock_outline_rounded,
       'rejected' => Icons.close_rounded,
       _ => Icons.schedule_rounded,
     };

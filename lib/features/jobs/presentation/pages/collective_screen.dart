@@ -40,9 +40,14 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
   Widget build(BuildContext context) {
     final screens = <Widget>[
       _isCompany
-          ? CompanyHomeScreen(onPostJobRequested: _openPostJob)
+          ? CompanyHomeScreen(
+              isActive: _currentIndex == 0,
+              onPostJobRequested: _openPostJob,
+            )
           : const IndividualHomeScreen(),
-      _isCompany ? const CompanyMyJobsScreen() : const MyJobsScreen(),
+      _isCompany
+          ? CompanyMyJobsScreen(isActive: _currentIndex == 1)
+          : MyJobsScreen(isActive: _currentIndex == 1),
       const _PlaceholderScreen(
         icon: Icons.notifications_none_rounded,
         title: 'Notifications',

@@ -19,9 +19,14 @@ class _WorkerCategory {
 }
 
 class CompanyHomeScreen extends ConsumerStatefulWidget {
+  final bool isActive;
   final ValueChanged<String?>? onPostJobRequested;
 
-  const CompanyHomeScreen({super.key, this.onPostJobRequested});
+  const CompanyHomeScreen({
+    super.key,
+    this.isActive = true,
+    this.onPostJobRequested,
+  });
 
   @override
   ConsumerState<CompanyHomeScreen> createState() => _CompanyHomeScreenState();
@@ -30,6 +35,7 @@ class CompanyHomeScreen extends ConsumerStatefulWidget {
 class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
   final _searchController = TextEditingController();
   Timer? _statsRefreshTimer;
+  bool _isRefreshingStats = false;
 
   static const _categories = [
     _WorkerCategory(
@@ -54,18 +60,42 @@ class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_refreshStats);
-    _statsRefreshTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _refreshStats(),
-    );
+    if (widget.isActive) {
+      Future.microtask(_startRefreshingStats);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CompanyHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive == widget.isActive) return;
+
+    if (widget.isActive) {
+      _startRefreshingStats();
+    } else {
+      _stopRefreshingStats();
+    }
   }
 
   @override
   void dispose() {
-    _statsRefreshTimer?.cancel();
+    _stopRefreshingStats();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _startRefreshingStats() {
+    if (!mounted || _statsRefreshTimer != null) return;
+    _refreshStats();
+    _statsRefreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _refreshStats(),
+    );
+  }
+
+  void _stopRefreshingStats() {
+    _statsRefreshTimer?.cancel();
+    _statsRefreshTimer = null;
   }
 
   @override
@@ -132,9 +162,20 @@ class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
     widget.onPostJobRequested?.call(roleType);
   }
 
-  void _refreshStats() {
-    if (!mounted || ref.read(jobViewModelProvider).isFetchingJobs) return;
-    ref.read(jobViewModelProvider.notifier).getMyJobs();
+  Future<void> _refreshStats() async {
+    if (!mounted ||
+        !widget.isActive ||
+        _isRefreshingStats ||
+        ref.read(jobViewModelProvider).isFetchingJobs) {
+      return;
+    }
+
+    _isRefreshingStats = true;
+    try {
+      await ref.read(jobViewModelProvider.notifier).getMyJobs();
+    } finally {
+      _isRefreshingStats = false;
+    }
   }
 
   bool _isActiveJob(JobEntity job) {

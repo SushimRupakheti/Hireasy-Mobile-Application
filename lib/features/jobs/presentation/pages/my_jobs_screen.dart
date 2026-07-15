@@ -7,7 +7,9 @@ import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemode
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/job_card.dart';
 
 class MyJobsScreen extends ConsumerStatefulWidget {
-  const MyJobsScreen({super.key});
+  final bool isActive;
+
+  const MyJobsScreen({super.key, this.isActive = true});
 
   @override
   ConsumerState<MyJobsScreen> createState() => _MyJobsScreenState();
@@ -23,7 +25,17 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_loadApplications);
+    if (widget.isActive) {
+      Future.microtask(_loadApplications);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MyJobsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _loadApplications();
+    }
   }
 
   @override
@@ -35,7 +47,8 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(jobViewModelProvider);
-    if (!_hasLoadedApplications &&
+    if (widget.isActive &&
+        !_hasLoadedApplications &&
         !_hasRequestedApplications &&
         !_isLoadingApplications &&
         !state.isFetchingJobs) {
@@ -160,7 +173,9 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
   }
 
   Future<void> _loadApplications() async {
-    if (_isLoadingApplications ||
+    if (!mounted ||
+        !widget.isActive ||
+        _isLoadingApplications ||
         ref.read(jobViewModelProvider).isFetchingJobs) {
       return;
     }

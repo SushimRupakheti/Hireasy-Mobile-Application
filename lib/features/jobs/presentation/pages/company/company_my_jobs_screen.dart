@@ -9,7 +9,9 @@ import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemode
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/job_card.dart';
 
 class CompanyMyJobsScreen extends ConsumerStatefulWidget {
-  const CompanyMyJobsScreen({super.key});
+  final bool isActive;
+
+  const CompanyMyJobsScreen({super.key, this.isActive = true});
 
   @override
   ConsumerState<CompanyMyJobsScreen> createState() =>
@@ -20,22 +22,47 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
   final _searchController = TextEditingController();
   Timer? _jobsRefreshTimer;
   DateTime? _selectedDate;
+  bool _isRefreshingJobs = false;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(_refreshJobs);
-    _jobsRefreshTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _refreshJobs(),
-    );
+    if (widget.isActive) {
+      Future.microtask(_startRefreshingJobs);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CompanyMyJobsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive == widget.isActive) return;
+
+    if (widget.isActive) {
+      _startRefreshingJobs();
+    } else {
+      _stopRefreshingJobs();
+    }
   }
 
   @override
   void dispose() {
-    _jobsRefreshTimer?.cancel();
+    _stopRefreshingJobs();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _startRefreshingJobs() {
+    if (!mounted || _jobsRefreshTimer != null) return;
+    _refreshJobs();
+    _jobsRefreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _refreshJobs(),
+    );
+  }
+
+  void _stopRefreshingJobs() {
+    _jobsRefreshTimer?.cancel();
+    _jobsRefreshTimer = null;
   }
 
   @override
@@ -160,8 +187,18 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
   }
 
   Future<void> _refreshJobs() async {
-    if (!mounted || ref.read(jobViewModelProvider).isFetchingJobs) return;
-    await ref.read(jobViewModelProvider.notifier).getMyJobs();
+    if (!mounted ||
+        !widget.isActive ||
+        _isRefreshingJobs ||
+        ref.read(jobViewModelProvider).isFetchingJobs) {
+      return;
+    }
+    _isRefreshingJobs = true;
+    try {
+      await ref.read(jobViewModelProvider.notifier).getMyJobs();
+    } finally {
+      _isRefreshingJobs = false;
+    }
   }
 
   Widget _buildBody({required List<JobEntity> jobs, required JobState state}) {

@@ -157,7 +157,15 @@ class GetAppliedJobsApiResponse {
     if (normalized == null || normalized.isEmpty) return 'pending';
     if (normalized == 'approved') return 'accepted';
     if (normalized == 'declined') return 'rejected';
-    return normalized;
+    if (const {
+      'pending',
+      'accepted',
+      'rejected',
+      'completed',
+    }.contains(normalized)) {
+      return normalized;
+    }
+    return 'pending';
   }
 }
 

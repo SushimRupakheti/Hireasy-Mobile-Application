@@ -14,8 +14,13 @@ final applicationUserProvider = FutureProvider.autoDispose<AuthEntity?>((ref) {
 
 class JobDetailsScreen extends ConsumerStatefulWidget {
   final JobEntity job;
+  final String? applicationStatus;
 
-  const JobDetailsScreen({super.key, required this.job});
+  const JobDetailsScreen({
+    super.key,
+    required this.job,
+    this.applicationStatus,
+  });
 
   @override
   ConsumerState<JobDetailsScreen> createState() => _JobDetailsScreenState();
@@ -28,11 +33,11 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
   Widget build(BuildContext context) {
     final jobState = ref.watch(jobViewModelProvider);
     final isApplying = jobState.isApplying && jobState.applyingJobId == job.id;
-    final hasApplied =
-        job.id != null && jobState.appliedJobIds.contains(job.id);
-    final applicationStatus = job.id == null
+    final hasApplied = widget.applicationStatus != null ||
+        (job.id != null && jobState.appliedJobIds.contains(job.id));
+    final applicationStatus = widget.applicationStatus ?? (job.id == null
         ? null
-        : jobState.applicationStatuses[job.id];
+        : jobState.applicationStatuses[job.id]);
     final isVerified = ref.read(tokenServiceProvider).isVerified;
     final currentUser = ref.watch(applicationUserProvider);
     final isCheckingResume = currentUser.isLoading;
@@ -81,7 +86,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           child: Text(
                             job.roleType.isEmpty
                                 ? 'Untitled job'
-                                : job.roleType,
+                                : _displayValue(job.roleType),
                             style: const TextStyle(
                               color: Color(0xFF17191D),
                               fontSize: 25,
@@ -95,7 +100,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           text: TextSpan(
                             children: [
                               TextSpan(
-                                text: '\$${_formatPay(job.pay)}',
+                                text: 'NPR ${_formatPay(job.pay)}',
                                 style: const TextStyle(
                                   color: Color(0xFFFF3347),
                                   fontSize: 22,
@@ -119,18 +124,27 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                       icon: Icons.location_on_outlined,
                       text: job.location.isEmpty
                           ? 'Location not provided'
-                          : job.location,
+                          : _displayValue(job.location),
                     ),
                     const SizedBox(height: 10),
                     _DetailRow(
                       icon: Icons.schedule_rounded,
-                      text: job.shift.isEmpty ? 'Flexible shift' : job.shift,
+                      text: job.shift.isEmpty
+                          ? 'Flexible shift'
+                          : _displayValue(job.shift),
                     ),
+                    if (job.jobDate.trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _DetailRow(
+                        icon: Icons.calendar_today_outlined,
+                        text: _formatJobDate(job.jobDate),
+                      ),
+                    ],
                     if (job.status.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       _DetailRow(
                         icon: Icons.info_outline_rounded,
-                        text: _capitalize(job.status),
+                        text: _capitalize(_displayValue(job.status)),
                       ),
                     ],
                     if (hasApplied) ...[
@@ -196,7 +210,6 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                             isUnavailable: isUnavailable,
                             hasApplied: hasApplied,
                             isVerified: isVerified,
-                            applicationStatus: applicationStatus,
                             isCheckingResume: isCheckingResume,
                             hasResume: hasResume,
                           ),
@@ -220,12 +233,11 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
     required bool isUnavailable,
     required bool hasApplied,
     required bool isVerified,
-    required String? applicationStatus,
     required bool isCheckingResume,
     required bool hasResume,
   }) {
     if (hasApplied) {
-      return 'Application ${_capitalize(applicationStatus ?? 'pending')}';
+      return 'Already applied';
     }
     if (isUnavailable) return 'Job unavailable';
     if (!isVerified) return 'Verification required';
@@ -299,6 +311,30 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
         : pay.toStringAsFixed(2);
   }
 
+  String _formatJobDate(String value) {
+    final date = DateTime.tryParse(value.trim());
+    if (date == null) return value.trim();
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  String _displayValue(String value) {
+    return value.replaceAll('[', '').replaceAll(']', '').trim();
+  }
+
   String _capitalize(String value) {
     final cleanValue = value.trim();
     if (cleanValue.isEmpty) return cleanValue;
@@ -317,38 +353,31 @@ class _ApplicationStatusCard extends StatelessWidget {
     final color = switch (normalized) {
       'accepted' => const Color(0xFF237A45),
       'rejected' => const Color(0xFFB42318),
+      'completed' => const Color(0xFF435D95),
       _ => const Color(0xFFE09A22),
     };
     final icon = switch (normalized) {
       'accepted' => Icons.check_circle_outline_rounded,
       'rejected' => Icons.cancel_outlined,
+      'completed' => Icons.task_alt_rounded,
       _ => Icons.schedule_rounded,
     };
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Application status: ${_label(normalized)}',
-              style: TextStyle(
-                color: color,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
+    return Row(
+      children: [
+        Icon(icon, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Application status: ${_label(normalized)}',
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

@@ -88,7 +88,7 @@ class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
     if (!mounted || _statsRefreshTimer != null) return;
     _refreshStats();
     _statsRefreshTimer = Timer.periodic(
-      const Duration(seconds: 15),
+      const Duration(seconds: 3),
       (_) => _refreshStats(),
     );
   }
@@ -172,6 +172,7 @@ class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
 
     _isRefreshingStats = true;
     try {
+      ref.invalidate(currentProfileProvider);
       await ref.read(jobViewModelProvider.notifier).getMyJobs();
     } finally {
       _isRefreshingStats = false;
@@ -255,7 +256,6 @@ class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
                   ],
                 ),
               ),
-              _MessageButton(onPressed: () {}),
             ],
           ),
           const SizedBox(height: 34),
@@ -360,46 +360,6 @@ class _CompanyHomeScreenState extends ConsumerState<CompanyHomeScreen> {
     if (email.isNotEmpty) return email;
 
     return 'Company';
-  }
-}
-
-class _MessageButton extends StatelessWidget {
-  final VoidCallback onPressed;
-
-  const _MessageButton({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: const SizedBox(
-          width: 56,
-          height: 56,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                Icons.chat_bubble_outline_rounded,
-                color: Color(0xFF161616),
-                size: 25,
-              ),
-              Positioned(
-                right: 16,
-                top: 16,
-                child: CircleAvatar(
-                  radius: 3.5,
-                  backgroundColor: Color(0xFFFF001D),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

@@ -48,6 +48,7 @@ class CreateJobUsecase {
         jobDate: params.jobDate.trim(),
         photos: params.photos,
         description: params.description.trim(),
+        status: 'pending',
       ),
       photoUploads: params.photoUploads,
     );

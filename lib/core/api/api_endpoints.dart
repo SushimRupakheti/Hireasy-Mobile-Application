@@ -137,8 +137,7 @@ class ApiEndpoints {
   static const String currentUserDocument = '/users/me/document';
   static const String downloadCurrentUserDocument =
       '/users/me/document/download';
-  static const String currentUserProfilePicture =
-      '/auth/me/profile-picture';
+  static const String currentUserProfilePicture = '/auth/me/profile-picture';
 
   // ================= JOB ENDPOINTS =================
   static const String jobs = '/jobs';
@@ -148,4 +147,14 @@ class ApiEndpoints {
   static String jobById(String jobId) => '/jobs/$jobId';
   static String applyForJob(String jobId) => '/jobs/$jobId/apply';
   static String jobApplicants(String jobId) => '/jobs/$jobId/applicants';
+
+  // ================= NOTIFICATION ENDPOINTS =================
+  static const String notifications = '/notifications';
+  static String notificationRead(String notificationId) =>
+      '/notifications/$notificationId/read';
+  static const String notificationsReadAll = '/notifications/read-all';
+
+  // ================= SUPPORT MESSAGE ENDPOINTS =================
+  static const String messages = '/messages';
+  static const String messagesRead = '/messages/read';
 }

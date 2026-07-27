@@ -42,7 +42,7 @@ class JobCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      title,
+                      _cleanDisplayValue(title),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -55,7 +55,7 @@ class JobCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    pay,
+                    _cleanDisplayValue(pay),
                     style: const TextStyle(
                       color: Color(0xFFFF3347),
                       fontSize: 17,
@@ -72,9 +72,15 @@ class JobCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 9),
-              _InfoRow(icon: Icons.location_on_outlined, text: location),
+              _InfoRow(
+                icon: Icons.location_on_outlined,
+                text: _cleanDisplayValue(location),
+              ),
               const SizedBox(height: 7),
-              _InfoRow(icon: Icons.schedule_rounded, text: duration),
+              _InfoRow(
+                icon: Icons.schedule_rounded,
+                text: _cleanDisplayValue(duration),
+              ),
               if (description.trim().isNotEmpty) ...[
                 const SizedBox(height: 11),
                 Row(
@@ -82,7 +88,7 @@ class JobCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        description,
+                        _cleanDisplayValue(description),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -120,12 +126,13 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final normalized = status.trim().toLowerCase();
+    final normalized = _cleanDisplayValue(status).toLowerCase();
     final color = switch (normalized) {
       'accepted' => const Color(0xFF38C95B),
       'open' => const Color(0xFF38C95B),
       'opened' => const Color(0xFF38C95B),
       'verified' => const Color(0xFF38C95B),
+      'completed' => const Color(0xFF435D95),
       'pending' => const Color(0xFFD5D91C),
       'closed' => const Color(0xFF8E929B),
       'rejected' => const Color(0xFFE90012),
@@ -136,6 +143,7 @@ class _StatusBadge extends StatelessWidget {
       'open' => Icons.check_rounded,
       'opened' => Icons.check_rounded,
       'verified' => Icons.verified_rounded,
+      'completed' => Icons.task_alt_rounded,
       'closed' => Icons.lock_outline_rounded,
       'rejected' => Icons.close_rounded,
       _ => Icons.schedule_rounded,
@@ -169,6 +177,10 @@ class _StatusBadge extends StatelessWidget {
     if (value.isEmpty || value == 'pending') return 'Pending';
     return '${value[0].toUpperCase()}${value.substring(1)}';
   }
+}
+
+String _cleanDisplayValue(String value) {
+  return value.replaceAll('[', '').replaceAll(']', '').trim();
 }
 
 class _InfoRow extends StatelessWidget {

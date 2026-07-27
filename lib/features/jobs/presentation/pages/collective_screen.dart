@@ -1,22 +1,35 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_home_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_job_details_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_my_jobs_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_post_job_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/individual_home_screen.dart';
-import 'package:hireasy_mobile/features/jobs/presentation/pages/my_jobs_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/individual_job_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/job_details_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/pages/profile_screen.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/providers/current_profile_provider.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
+import 'package:hireasy_mobile/features/notifications/presentation/pages/notification_screen.dart';
+import 'package:hireasy_mobile/features/notifications/presentation/view_model/notification_view_model.dart';
+import 'package:hireasy_mobile/features/support_messages/presentation/pages/support_chat_screen.dart';
 
-class CollectiveScreen extends StatefulWidget {
+class CollectiveScreen extends ConsumerStatefulWidget {
   final String role;
 
   const CollectiveScreen({super.key, required this.role});
 
   @override
-  State<CollectiveScreen> createState() => _CollectiveScreenState();
+  ConsumerState<CollectiveScreen> createState() => _CollectiveScreenState();
 }
 
-class _CollectiveScreenState extends State<CollectiveScreen> {
+class _CollectiveScreenState extends ConsumerState<CollectiveScreen>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
+  Timer? _notificationTimer;
 
   bool get _isCompany {
     final role = widget.role.trim().toLowerCase();
@@ -25,6 +38,47 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
 
   void _selectTab(int index) {
     setState(() => _currentIndex = index);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    Future.microtask(_startNotifications);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopNotificationPolling();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startNotifications();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _stopNotificationPolling();
+    }
+  }
+
+  Future<void> _startNotifications() async {
+    if (!mounted) return;
+    await ref.read(notificationViewModelProvider.notifier).initialize();
+    if (!mounted || _notificationTimer != null) return;
+    _notificationTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      ref.read(notificationViewModelProvider.notifier).refresh();
+      ref.invalidate(currentProfileProvider);
+    });
+  }
+
+  void _stopNotificationPolling() {
+    _notificationTimer?.cancel();
+    _notificationTimer = null;
   }
 
   void _openPostJob([String? roleType]) {
@@ -38,6 +92,7 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final notificationState = ref.watch(notificationViewModelProvider);
     final screens = <Widget>[
       _isCompany
           ? CompanyHomeScreen(
@@ -47,11 +102,12 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
           : const IndividualHomeScreen(),
       _isCompany
           ? CompanyMyJobsScreen(isActive: _currentIndex == 1)
-          : MyJobsScreen(isActive: _currentIndex == 1),
-      const _PlaceholderScreen(
-        icon: Icons.notifications_none_rounded,
-        title: 'Notifications',
-        message: 'Your latest updates will appear here.',
+          : IndividualJobScreen(isActive: _currentIndex == 1),
+      NotificationScreen(
+        onOpenProfile: () => _selectTab(3),
+        onOpenJob: (jobId) => _openNotificationJob(jobId),
+        onOpenApplicants: (jobId) => _openNotificationJob(jobId),
+        onOpenSupport: _openSupport,
       ),
       const ProfileScreen(),
     ];
@@ -62,8 +118,43 @@ class _CollectiveScreenState extends State<CollectiveScreen> {
         currentIndex: _currentIndex,
         onTap: _selectTab,
         secondLabel: _isCompany ? 'My Jobs' : 'Applications',
+        hasUnreadNotifications:
+            notificationState.isAuthenticated &&
+            notificationState.unreadCount > 0,
       ),
     );
+  }
+
+  void _openNotificationJob(String jobId) {
+    final job = _findJob(jobId);
+    if (job == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This job is not currently available.')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _isCompany
+            ? CompanyJobDetailsScreen(job: job)
+            : JobDetailsScreen(job: job),
+      ),
+    );
+  }
+
+  void _openSupport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SupportChatScreen()),
+    );
+  }
+
+  JobEntity? _findJob(String jobId) {
+    for (final job in ref.read(jobViewModelProvider).jobs) {
+      if (job.id == jobId) return job;
+    }
+    return null;
   }
 }
 
@@ -71,11 +162,13 @@ class _CollectiveBottomNavigation extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final String secondLabel;
+  final bool hasUnreadNotifications;
 
   const _CollectiveBottomNavigation({
     required this.currentIndex,
     required this.onTap,
     required this.secondLabel,
+    required this.hasUnreadNotifications,
   });
 
   @override
@@ -110,6 +203,7 @@ class _CollectiveBottomNavigation extends StatelessWidget {
               selectedIcon: Icons.notifications_rounded,
               label: 'Notifications',
               selected: currentIndex == 2,
+              showUnreadDot: hasUnreadNotifications,
               onTap: () => onTap(2),
             ),
             _NavigationItem(
@@ -131,6 +225,7 @@ class _NavigationItem extends StatelessWidget {
   final IconData selectedIcon;
   final String label;
   final bool selected;
+  final bool showUnreadDot;
   final VoidCallback onTap;
 
   const _NavigationItem({
@@ -138,6 +233,7 @@ class _NavigationItem extends StatelessWidget {
     required this.selectedIcon,
     required this.label,
     required this.selected,
+    this.showUnreadDot = false,
     required this.onTap,
   });
 
@@ -158,56 +254,30 @@ class _NavigationItem extends StatelessWidget {
             color: selected ? const Color(0xFF435D95) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(
-            selected ? selectedIcon : icon,
-            color: selected ? Colors.white : const Color(0xFF17191D),
-            size: 29,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderScreen extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-
-  const _PlaceholderScreen({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFF7F8FA),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 50, color: const Color(0xFF71809C)),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                selected ? selectedIcon : icon,
+                color: selected ? Colors.white : const Color(0xFF17191D),
+                size: 29,
+              ),
+              if (showUnreadDot)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE53935),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 7),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Color(0xFF777C86)),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),

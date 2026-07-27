@@ -1,77 +1,43 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/applied_jobs_result.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
-import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_job_details_screen.dart';
-import 'package:hireasy_mobile/features/jobs/presentation/state/job_state.dart';
-import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
+import 'package:hireasy_mobile/features/jobs/domain/usecases/get_my_applications_usecase.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/individual/job_details_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/job_card.dart';
 
-class CompanyMyJobsScreen extends ConsumerStatefulWidget {
+final individualJobApplicationsProvider =
+    FutureProvider.autoDispose<AppliedJobsResult>((ref) {
+      return ref.read(getMyApplicationsUsecaseProvider).call();
+    });
+
+class IndividualJobScreen extends ConsumerStatefulWidget {
   final bool isActive;
 
-  const CompanyMyJobsScreen({super.key, this.isActive = true});
+  const IndividualJobScreen({super.key, this.isActive = true});
 
   @override
-  ConsumerState<CompanyMyJobsScreen> createState() =>
-      _CompanyMyJobsScreenState();
+  ConsumerState<IndividualJobScreen> createState() =>
+      _IndividualJobScreenState();
 }
 
-class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
+class _IndividualJobScreenState extends ConsumerState<IndividualJobScreen> {
   final _searchController = TextEditingController();
-  Timer? _jobsRefreshTimer;
   DateTime? _selectedDate;
-  bool _isRefreshingJobs = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.isActive) {
-      Future.microtask(_startRefreshingJobs);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant CompanyMyJobsScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive == widget.isActive) return;
-
-    if (widget.isActive) {
-      _startRefreshingJobs();
-    } else {
-      _stopRefreshingJobs();
-    }
-  }
 
   @override
   void dispose() {
-    _stopRefreshingJobs();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _startRefreshingJobs() {
-    if (!mounted || _jobsRefreshTimer != null) return;
-    _refreshJobs();
-    _jobsRefreshTimer = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) => _refreshJobs(),
-    );
-  }
-
-  void _stopRefreshingJobs() {
-    _jobsRefreshTimer?.cancel();
-    _jobsRefreshTimer = null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(jobViewModelProvider);
-    final myJobs = state.jobs
-        .where(_matchesSelectedDate)
-        .where(_matchesSearch)
-        .toList();
+    if (!widget.isActive) {
+      return const ColoredBox(color: Color(0xFFF7F8FA));
+    }
+
+    final applications = ref.watch(individualJobApplicationsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FA),
@@ -132,7 +98,7 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _selectedDate == null
-                      ? 'All posted jobs'
+                      ? 'All applied jobs'
                       : _fullDate(_selectedDate!),
                   style: const TextStyle(
                     color: Color(0xFF252832),
@@ -148,12 +114,79 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
               onSelected: (date) => setState(() => _selectedDate = date),
             ),
             const SizedBox(height: 14),
-            Expanded(
-              child: _buildBody(jobs: myJobs, state: state),
-            ),
+            Expanded(child: _buildBody(applications)),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(AsyncValue<AppliedJobsResult> applications) {
+    return applications.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => _RefreshableState(
+        onRefresh: _refresh,
+        child: _MessageState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Could not load your applications',
+          message: _errorMessage(error),
+          buttonText: 'Try again',
+          onPressed: () => ref.invalidate(individualJobApplicationsProvider),
+        ),
+      ),
+      data: (result) {
+        final jobs = result.jobs
+            .where(_matchesSelectedDate)
+            .where(_matchesSearch)
+            .toList();
+
+        if (jobs.isEmpty) {
+          return _RefreshableState(
+            onRefresh: _refresh,
+            child: const _MessageState(
+              icon: Icons.work_history_outlined,
+              title: 'No applications found',
+              message: 'Jobs you apply for will appear here.',
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            itemCount: jobs.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final job = jobs[index];
+              final status = _applicationStatus(result, job);
+
+              return JobCard(
+                title: job.roleType.isEmpty ? 'Untitled job' : job.roleType,
+                location: job.location.isEmpty
+                    ? 'Location not provided'
+                    : job.location,
+                duration: job.shift.isEmpty ? 'Flexible shift' : job.shift,
+                pay: 'NPR ${_formatPay(job.pay)}',
+                description: job.description,
+                status: status,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => JobDetailsScreen(
+                        job: job,
+                        applicationStatus: status,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -168,16 +201,9 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
   bool _matchesSelectedDate(JobEntity job) {
     final selectedDate = _selectedDate;
     if (selectedDate == null) return true;
-
-    final jobDate = _parseJobDate(job.jobDate);
+    final jobDate = DateTime.tryParse(job.jobDate.trim());
     if (jobDate == null) return false;
     return _sameDay(jobDate, selectedDate);
-  }
-
-  DateTime? _parseJobDate(String value) {
-    final trimmedValue = value.trim();
-    if (trimmedValue.isEmpty) return null;
-    return DateTime.tryParse(trimmedValue);
   }
 
   bool _sameDay(DateTime first, DateTime second) {
@@ -186,78 +212,21 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
         first.day == second.day;
   }
 
-  Future<void> _refreshJobs() async {
-    if (!mounted ||
-        !widget.isActive ||
-        _isRefreshingJobs ||
-        ref.read(jobViewModelProvider).isFetchingJobs) {
-      return;
-    }
-    _isRefreshingJobs = true;
-    try {
-      await ref.read(jobViewModelProvider.notifier).getMyJobs();
-    } finally {
-      _isRefreshingJobs = false;
-    }
+  Future<void> _refresh() async {
+    ref.invalidate(individualJobApplicationsProvider);
+    await ref.read(individualJobApplicationsProvider.future);
   }
 
-  Widget _buildBody({required List<JobEntity> jobs, required JobState state}) {
-    if (state.isFetchingJobs && state.jobs.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (state.errorMessage != null && state.jobs.isEmpty) {
-      return _EmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: 'Could not load your jobs',
-        message: state.errorMessage!,
-        buttonText: 'Try again',
-        onPressed: _refreshJobs,
-      );
-    }
-    if (jobs.isEmpty) {
-      return const _EmptyState(
-        icon: Icons.work_outline_rounded,
-        title: 'No jobs posted yet',
-        message: 'Jobs you post will appear here.',
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _refreshJobs,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        itemCount: jobs.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, index) {
-          final job = jobs[index];
-          return JobCard(
-            title: job.roleType.isEmpty ? 'Untitled job' : job.roleType,
-            location: job.location.isEmpty
-                ? 'Location not provided'
-                : job.location,
-            duration: job.shift.isEmpty ? 'Flexible shift' : job.shift,
-            pay: 'NPR ${_formatPay(job.pay)}',
-            description: job.description,
-            status: job.status.isEmpty ? 'open' : job.status,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CompanyJobDetailsScreen(job: job),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  String _formatPay(num pay) {
-    return pay == pay.roundToDouble()
-        ? pay.toInt().toString()
-        : pay.toStringAsFixed(2);
+  String _applicationStatus(AppliedJobsResult result, JobEntity job) {
+    final status = result.applicationStatuses[job.id]?.trim().toLowerCase();
+    return const {
+      'pending',
+      'accepted',
+      'rejected',
+      'completed',
+    }.contains(status)
+        ? status!
+        : 'pending';
   }
 
   String _fullDate(DateTime date) {
@@ -275,7 +244,8 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
       'November',
       'December',
     ];
-    return '${date.day} ${_weekday(date.weekday)} ${months[date.month - 1]} ${date.year} ▼';
+    return '${date.day} ${_weekday(date.weekday)} '
+        '${months[date.month - 1]} ${date.year}';
   }
 
   String _weekday(int weekday) {
@@ -289,6 +259,17 @@ class _CompanyMyJobsScreenState extends ConsumerState<CompanyMyJobsScreen> {
       'Sunday',
     ];
     return weekdays[weekday - 1];
+  }
+
+  String _formatPay(num pay) {
+    return pay == pay.roundToDouble()
+        ? pay.toInt().toString()
+        : pay.toStringAsFixed(2);
+  }
+
+  String _errorMessage(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '').trim();
+    return message.isEmpty ? 'Unable to load your applications.' : message;
   }
 }
 
@@ -326,6 +307,7 @@ class _DateSelector extends StatelessWidget {
               ? _primaryColor
               : const Color(0xFFD5D8DF);
           final borderWidth = selected || isToday ? 1.5 : 1.0;
+
           return InkWell(
             onTap: () => onSelected(selected ? null : date),
             borderRadius: BorderRadius.circular(8),
@@ -413,14 +395,39 @@ class _DateSelector extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
+class _RefreshableState extends StatelessWidget {
+  final Future<void> Function() onRefresh;
+  final Widget child;
+
+  const _RefreshableState({required this.onRefresh, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MessageState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String message;
   final String? buttonText;
   final VoidCallback? onPressed;
 
-  const _EmptyState({
+  const _MessageState({
     required this.icon,
     required this.title,
     required this.message,
@@ -436,20 +443,25 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 46, color: const Color(0xFF7A8498)),
-            const SizedBox(height: 12),
+            Icon(icon, size: 48, color: const Color(0xFF71809C)),
+            const SizedBox(height: 14),
             Text(
               title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF17191D),
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 7),
             Text(
               message,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Color(0xFF777C86)),
             ),
             if (buttonText != null && onPressed != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 17),
               FilledButton(onPressed: onPressed, child: Text(buttonText!)),
             ],
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/core/api/token_service.dart';
+import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/create_job_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
@@ -8,8 +9,13 @@ import 'package:image_picker/image_picker.dart';
 
 class CompanyPostJobScreen extends ConsumerStatefulWidget {
   final String? initialRoleType;
+  final JobEntity? initialJob;
 
-  const CompanyPostJobScreen({super.key, this.initialRoleType});
+  const CompanyPostJobScreen({
+    super.key,
+    this.initialRoleType,
+    this.initialJob,
+  });
 
   @override
   ConsumerState<CompanyPostJobScreen> createState() =>
@@ -35,7 +41,15 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
   @override
   void initState() {
     super.initState();
-    _roleTypeController.text = widget.initialRoleType?.trim() ?? '';
+    final initialJob = widget.initialJob;
+    _roleTypeController.text =
+        initialJob?.roleType.trim() ?? widget.initialRoleType?.trim() ?? '';
+    if (initialJob == null) return;
+    _payController.text = _formatInitialNumber(initialJob.pay);
+    _workersController.text = initialJob.numberOfWorkers.toString();
+    _locationController.text = initialJob.location.trim();
+    _descriptionController.text = initialJob.description.trim();
+    _shiftRanges.addAll(_parseInitialShifts(initialJob.shift));
   }
 
   @override
@@ -71,6 +85,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
             shift: _formatShiftRanges(),
             location: _locationController.text,
             jobDate: _formatApiDate(_selectedJobDate!),
+            photos: widget.initialJob?.photos ?? const [],
             photoUploads: photoUploads,
             description: _descriptionController.text,
           ),
@@ -271,6 +286,17 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
                   onRemove: (photo) =>
                       setState(() => _selectedPhotos.remove(photo)),
                 ),
+                if (widget.initialJob?.photos.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${widget.initialJob!.photos.length} existing job '
+                    'photo(s) will be reused.',
+                    style: const TextStyle(
+                      color: Color(0xFF667085),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 _FieldLabel(label: 'Description'),
                 const SizedBox(height: 8),
@@ -491,10 +517,49 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
         .join(', ');
   }
 
+  String _formatInitialNumber(num value) {
+    return value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toString();
+  }
+
+  List<_ShiftTimeRange> _parseInitialShifts(String value) {
+    final ranges = <_ShiftTimeRange>[];
+    for (final part in value.split(',')) {
+      final match = RegExp(r'^\s*(.+?)\s+-\s+(.+?)\s*$').firstMatch(part);
+      if (match == null) continue;
+      final start = _parseInitialTime(match.group(1));
+      final end = _parseInitialTime(match.group(2));
+      if (start == null || end == null) continue;
+      ranges.add(_ShiftTimeRange(start: start, end: end));
+    }
+    return ranges;
+  }
+
+  TimeOfDay? _parseInitialTime(String? value) {
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM)?$',
+      caseSensitive: false,
+    ).firstMatch(value?.trim() ?? '');
+    if (match == null) return null;
+    var hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null || minute > 59) return null;
+    final period = match.group(3)?.toUpperCase();
+    if (period != null) {
+      if (hour < 1 || hour > 12) return null;
+      if (period == 'AM' && hour == 12) hour = 0;
+      if (period == 'PM' && hour != 12) hour += 12;
+    } else if (hour > 23) {
+      return null;
+    }
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
   int _timeInMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
 
   Future<void> _pickFromCamera() async {
-    if (_selectedPhotos.length >= 5) {
+    if (_selectedPhotos.length + _existingPhotoCount >= 5) {
       _showMessage('You can add at most 5 photos.', isError: true);
       return;
     }
@@ -509,7 +574,7 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
   }
 
   Future<void> _pickFromGallery() async {
-    final remainingSlots = 5 - _selectedPhotos.length;
+    final remainingSlots = 5 - _existingPhotoCount - _selectedPhotos.length;
     if (remainingSlots <= 0) {
       _showMessage('You can add at most 5 photos.', isError: true);
       return;
@@ -539,6 +604,8 @@ class _CompanyPostJobScreenState extends ConsumerState<CompanyPostJobScreen> {
     }
     return uploads;
   }
+
+  int get _existingPhotoCount => widget.initialJob?.photos.length ?? 0;
 }
 
 class _ShiftTimeRange {

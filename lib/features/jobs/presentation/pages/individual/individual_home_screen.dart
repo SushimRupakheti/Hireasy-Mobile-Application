@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hireasy_mobile/core/api/token_service.dart';
@@ -8,6 +10,7 @@ import 'package:hireasy_mobile/features/jobs/presentation/providers/current_prof
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/home_profile_avatar.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/widgets/job_card.dart';
+import 'package:hireasy_mobile/features/support_messages/presentation/pages/support_chat_screen.dart';
 
 class IndividualHomeScreen extends ConsumerStatefulWidget {
   const IndividualHomeScreen({super.key});
@@ -23,17 +26,33 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
 
   final _searchController = TextEditingController();
   String _selectedCategory = 'All';
+  Timer? _homeRefreshTimer;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(jobViewModelProvider.notifier).getJobs());
+    Future.microtask(_startAutoRefresh);
   }
 
   @override
   void dispose() {
+    _homeRefreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _startAutoRefresh() {
+    if (!mounted || _homeRefreshTimer != null) return;
+    _refreshHome();
+    _homeRefreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _refreshHome(),
+    );
+  }
+
+  Future<void> _refreshHome() async {
+    if (!mounted || ref.read(jobViewModelProvider).isFetchingJobs) return;
+    await ref.read(jobViewModelProvider.notifier).getJobs();
   }
 
   @override
@@ -107,12 +126,23 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
   }
 
   num _totalEarned(List<JobEntity> jobs, Map<String, String> statuses) {
-    return jobs.where((job) {
-      final jobId = job.id;
-      if (jobId == null) return false;
-      final status = statuses[jobId]?.trim().toLowerCase();
-      return status == 'accepted' || status == 'completed';
-    }).fold<num>(0, (total, job) => total + job.pay);
+    final now = DateTime.now();
+    return jobs
+        .where((job) {
+          final jobId = job.id;
+          if (jobId == null) return false;
+          final status = statuses[jobId]?.trim().toLowerCase();
+          if (status != 'accepted' && status != 'completed') return false;
+          final jobDate = DateTime.tryParse(job.jobDate.trim())?.toLocal();
+          if (jobDate == null) return false;
+          final endOfJobDay = DateTime(
+            jobDate.year,
+            jobDate.month,
+            jobDate.day + 1,
+          );
+          return !now.isBefore(endOfJobDay);
+        })
+        .fold<num>(0, (total, job) => total + job.pay);
   }
 
   String _accountStatusLabel(String? status) {
@@ -180,7 +210,12 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
                   ],
                 ),
               ),
-              const _MessageButton(),
+              _MessageButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SupportChatScreen()),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 28),
@@ -226,7 +261,7 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
                 icon: Icons.send_outlined,
               ),
               _StatCircle(
-                value: '\$${_formatPay(totalEarned)}',
+                value: 'NPR ${_formatPay(totalEarned)}',
                 title: 'Total Earned',
                 icon: Icons.payments_outlined,
               ),
@@ -286,7 +321,7 @@ class _IndividualHomeScreenState extends ConsumerState<IndividualHomeScreen> {
                 ? 'Location not provided'
                 : job.location,
             duration: job.shift.isEmpty ? 'Flexible shift' : job.shift,
-            pay: '\$${_formatPay(job.pay)}',
+            pay: 'NPR ${_formatPay(job.pay)}',
             description: job.description,
             onTap: () {
               Navigator.push(
@@ -389,7 +424,9 @@ class _CategoryBar extends StatelessWidget {
 }
 
 class _MessageButton extends StatelessWidget {
-  const _MessageButton();
+  final VoidCallback onPressed;
+
+  const _MessageButton({required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -397,7 +434,7 @@ class _MessageButton extends StatelessWidget {
       color: Colors.white,
       shape: const CircleBorder(),
       child: IconButton(
-        onPressed: () {},
+        onPressed: onPressed,
         padding: const EdgeInsets.all(15),
         icon: const Icon(
           Icons.chat_bubble_outline_rounded,

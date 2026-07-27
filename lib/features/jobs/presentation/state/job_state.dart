@@ -3,6 +3,7 @@ import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 class JobState {
   final bool isLoading;
   final bool isFetchingJobs;
+  final bool isFetchingApplications;
   final bool isApplying;
   final String? applyingJobId;
   final Set<String> appliedJobIds;
@@ -15,6 +16,7 @@ class JobState {
   const JobState({
     this.isLoading = false,
     this.isFetchingJobs = false,
+    this.isFetchingApplications = false,
     this.isApplying = false,
     this.applyingJobId,
     this.appliedJobIds = const {},
@@ -28,6 +30,7 @@ class JobState {
   JobState copyWith({
     bool? isLoading,
     bool? isFetchingJobs,
+    bool? isFetchingApplications,
     bool? isApplying,
     String? applyingJobId,
     Set<String>? appliedJobIds,
@@ -42,6 +45,8 @@ class JobState {
     return JobState(
       isLoading: isLoading ?? this.isLoading,
       isFetchingJobs: isFetchingJobs ?? this.isFetchingJobs,
+      isFetchingApplications:
+          isFetchingApplications ?? this.isFetchingApplications,
       isApplying: isApplying ?? this.isApplying,
       applyingJobId: clearApplyingJobId
           ? null

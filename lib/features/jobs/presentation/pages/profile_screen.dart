@@ -10,6 +10,9 @@ import 'package:hireasy_mobile/features/auth/domain/usecase/manage_document_usec
 import 'package:hireasy_mobile/features/auth/domain/usecase/update_profile_image_usecase.dart';
 import 'package:hireasy_mobile/features/auth/presentation/pages/login_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/providers/current_profile_provider.dart';
+import 'package:hireasy_mobile/features/notifications/presentation/view_model/notification_view_model.dart';
+import 'package:hireasy_mobile/features/support_messages/presentation/pages/support_chat_screen.dart';
+import 'package:hireasy_mobile/features/support_messages/presentation/view_model/support_message_view_model.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -46,6 +49,10 @@ class ProfileScreen extends ConsumerWidget {
                 onDeleteDocument: () => _deleteDocument(context, ref),
                 onUploadProfilePicture: () =>
                     _uploadProfilePicture(context, ref),
+                onOpenSupport: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SupportChatScreen()),
+                ),
                 onLogout: () => _logout(context, ref),
               ),
             );
@@ -80,6 +87,8 @@ class ProfileScreen extends ConsumerWidget {
 
     _showProgress(context, 'Logging out...');
     try {
+      ref.read(notificationViewModelProvider.notifier).clear();
+      ref.read(supportMessageViewModelProvider.notifier).clear();
       await ref.read(logoutUsecaseProvider).call();
     } finally {
       if (context.mounted) {
@@ -142,11 +151,7 @@ class ProfileScreen extends ConsumerWidget {
     } catch (_) {
       if (!context.mounted) return;
       if (progressVisible) _closeProgress(context);
-      _showMessage(
-        context,
-        'Unable to upload the document.',
-        isError: true,
-      );
+      _showMessage(context, 'Unable to upload the document.', isError: true);
     }
   }
 
@@ -369,6 +374,7 @@ class _ProfileContent extends StatelessWidget {
   final VoidCallback onDownloadDocument;
   final VoidCallback onDeleteDocument;
   final VoidCallback onUploadProfilePicture;
+  final VoidCallback onOpenSupport;
   final VoidCallback onLogout;
 
   const _ProfileContent({
@@ -377,6 +383,7 @@ class _ProfileContent extends StatelessWidget {
     required this.onDownloadDocument,
     required this.onDeleteDocument,
     required this.onUploadProfilePicture,
+    required this.onOpenSupport,
     required this.onLogout,
   });
 
@@ -450,6 +457,26 @@ class _ProfileContent extends StatelessWidget {
           onUpload: onUploadDocument,
           onDownload: onDownloadDocument,
           onDelete: onDeleteDocument,
+        ),
+        const SizedBox(height: 14),
+        ListTile(
+          onTap: onOpenSupport,
+          tileColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Color(0xFFD9DDE5)),
+          ),
+          leading: const CircleAvatar(
+            backgroundColor: Color(0xFFE8EEFA),
+            foregroundColor: Color(0xFF223E7F),
+            child: Icon(Icons.support_agent_rounded),
+          ),
+          title: const Text(
+            'Help & Support',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: const Text('Send a private message to Hireasy admin'),
+          trailing: const Icon(Icons.chevron_right_rounded),
         ),
         const SizedBox(height: 14),
         SizedBox(

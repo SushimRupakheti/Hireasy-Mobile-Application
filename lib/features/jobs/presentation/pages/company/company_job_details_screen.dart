@@ -6,14 +6,12 @@ import 'package:hireasy_mobile/features/jobs/domain/entities/job_entity.dart';
 import 'package:hireasy_mobile/features/jobs/domain/entities/job_photo_upload.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/get_job_applicants_usecase.dart';
 import 'package:hireasy_mobile/features/jobs/domain/usecases/update_job_usecase.dart';
+import 'package:hireasy_mobile/features/jobs/presentation/pages/company/company_post_job_screen.dart';
 import 'package:hireasy_mobile/features/jobs/presentation/view_model/job_viemodel.dart';
 import 'package:image_picker/image_picker.dart';
 
-final companyJobApplicantsProvider =
-    FutureProvider.autoDispose.family<List<JobApplicationEntity>, String>((
-      ref,
-      jobId,
-    ) {
+final companyJobApplicantsProvider = FutureProvider.autoDispose
+    .family<List<JobApplicationEntity>, String>((ref, jobId) {
       return ref.read(getJobApplicantsUsecaseProvider).call(jobId);
     });
 
@@ -111,7 +109,7 @@ class _CompanyJobDetailsScreenState
                           text: TextSpan(
                             children: [
                               TextSpan(
-                                text: '${_formatPay(job.pay)}\$',
+                                text: 'NPR ${_formatPay(job.pay)}',
                                 style: const TextStyle(
                                   color: Color(0xFFFF2B2B),
                                   fontSize: 26,
@@ -175,10 +173,7 @@ class _CompanyJobDetailsScreenState
                         TextButton(
                           onPressed: appliedCount == 0
                               ? null
-                              : () => _showWorkersDialog(
-                                  context,
-                                  applications,
-                                ),
+                              : () => _showWorkersDialog(context, applications),
                           style: TextButton.styleFrom(
                             foregroundColor: const Color(0xFF2B72FF),
                             disabledForegroundColor: const Color(0xFFB5BAC5),
@@ -202,7 +197,7 @@ class _CompanyJobDetailsScreenState
                     child: _ActionButton(
                       label: 'Repeat The Job',
                       color: _primaryColor,
-                      onPressed: () {},
+                      onPressed: () => _repeatJob(job),
                     ),
                   ),
                   const SizedBox(width: 22),
@@ -219,6 +214,13 @@ class _CompanyJobDetailsScreenState
           ],
         ),
       ),
+    );
+  }
+
+  void _repeatJob(JobEntity job) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CompanyPostJobScreen(initialJob: job)),
     );
   }
 
@@ -328,9 +330,9 @@ class _CompanyJobDetailsScreenState
 
     if (confirmed != true || !mounted) return;
 
-    final deleted = await ref.read(jobViewModelProvider.notifier).deleteJob(
-      jobId,
-    );
+    final deleted = await ref
+        .read(jobViewModelProvider.notifier)
+        .deleteJob(jobId);
     if (!mounted) return;
 
     final state = ref.read(jobViewModelProvider);
@@ -409,7 +411,9 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
       _jobDateController.text = _formatDisplayDate(_selectedJobDate!);
     }
     _existingPhotos.addAll(
-      job.photos.map((photo) => photo.trim()).where((photo) => photo.isNotEmpty),
+      job.photos
+          .map((photo) => photo.trim())
+          .where((photo) => photo.isNotEmpty),
     );
     _descriptionController.text = job.description;
   }
@@ -459,7 +463,9 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
                       ),
                     ),
                     IconButton(
-                      onPressed: isLoading ? null : () => Navigator.pop(context),
+                      onPressed: isLoading
+                          ? null
+                          : () => Navigator.pop(context),
                       icon: const Icon(Icons.close_rounded),
                     ),
                   ],
@@ -644,8 +650,8 @@ class _EditJobSheetState extends ConsumerState<_EditJobSheet> {
     FocusScope.of(context).unfocus();
     final today = DateTime.now();
     final firstDate = DateTime(today.year, today.month, today.day);
-    final initialDate = _selectedJobDate == null ||
-            _selectedJobDate!.isBefore(firstDate)
+    final initialDate =
+        _selectedJobDate == null || _selectedJobDate!.isBefore(firstDate)
         ? firstDate
         : _selectedJobDate!;
     final pickedDate = await showDatePicker(
@@ -1091,9 +1097,7 @@ class _WorkerTile extends StatelessWidget {
       height: 52,
       decoration: const BoxDecoration(
         color: Color(0xFFE6E6E6),
-        border: Border(
-          top: BorderSide(color: Color(0xFFCDCDCD)),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFFCDCDCD))),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
@@ -1158,11 +1162,7 @@ class _WorkerAvatarFallback extends StatelessWidget {
   Widget build(BuildContext context) {
     return const ColoredBox(
       color: Color(0xFFD4DBEA),
-      child: Icon(
-        Icons.person,
-        color: Color(0xFF33466F),
-        size: 24,
-      ),
+      child: Icon(Icons.person, color: Color(0xFF33466F), size: 24),
     );
   }
 }

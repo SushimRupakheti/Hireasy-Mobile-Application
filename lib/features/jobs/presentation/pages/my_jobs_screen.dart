@@ -50,8 +50,7 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
     if (widget.isActive &&
         !_hasLoadedApplications &&
         !_hasRequestedApplications &&
-        !_isLoadingApplications &&
-        !state.isFetchingJobs) {
+        !_isLoadingApplications) {
       Future.microtask(_loadApplications);
     }
     final appliedJobs = (_hasLoadedApplications ? state.jobs : <JobEntity>[])
@@ -173,10 +172,7 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
   }
 
   Future<void> _loadApplications() async {
-    if (!mounted ||
-        !widget.isActive ||
-        _isLoadingApplications ||
-        ref.read(jobViewModelProvider).isFetchingJobs) {
+    if (!mounted || !widget.isActive || _isLoadingApplications) {
       return;
     }
     setState(() {
@@ -195,7 +191,7 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
 
   Widget _buildBody({required List<JobEntity> jobs, required JobState state}) {
     if (!_hasLoadedApplications &&
-        (state.isFetchingJobs || _isLoadingApplications)) {
+        (state.isFetchingApplications || _isLoadingApplications)) {
       return const Center(child: CircularProgressIndicator());
     }
     if (state.errorMessage != null && jobs.isEmpty) {
@@ -237,7 +233,7 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
                 ? 'Location not provided'
                 : job.location,
             duration: job.shift.isEmpty ? 'Flexible shift' : job.shift,
-            pay: '\$${_formatPay(job.pay)}',
+            pay: 'NPR ${_formatPay(job.pay)}',
             description: job.description,
             status: status,
             onTap: () {
@@ -334,10 +330,7 @@ class _DateSelector extends StatelessWidget {
               decoration: BoxDecoration(
                 color: selected ? _primaryColor : Colors.white,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: borderColor,
-                  width: borderWidth,
-                ),
+                border: Border.all(color: borderColor, width: borderWidth),
                 boxShadow: selected
                     ? null
                     : const [
